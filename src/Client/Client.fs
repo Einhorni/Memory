@@ -34,7 +34,7 @@ type Model = {
 
 type Msg =
     | Bildwechsel of (int * int) list list
-    | AlleZudecken
+    | AlleZudecken of (int*int) list list
 
 
 let initialCounter () = Fetch.fetchAs<Counter> "/api/init"
@@ -49,38 +49,95 @@ let init () : Model * Cmd<Msg> =
 
 let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
     match  msg with
-    | Bildwechsel neueListe ->
+    | Bildwechsel newList ->
         
         let nextModel = {
             currentModel with
                 A1 = Visible, Unmatched
-                Feld = neueListe
+                Feld = newList
                 }
         nextModel, Cmd.none
-    | AlleZudecken ->
+    | AlleZudecken newList ->
         let nextModel = {
             currentModel with
                 A1 = Visible, Unmatched
-                Feld = [[(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]] 
+                Feld = newList
                 }
         nextModel, Cmd.none
         
 let r = Random()
 
-let chooseImages =
-    match r.Next(1,9) with
-    | 1 -> Src "images\Unbenannt2.png"
-    | 2 -> Src "images\Unbenannt3.png"
-    | 3 -> Src "images\Unbenannt4.png"
-    | 4 -> Src "images\Unbenannt5.png"
-    | 5 -> Src "images\Unbenannt6.png"
-    | 6 -> Src "images\Unbenannt7.png"
-    | 7 -> Src "images\Unbenannt8.png"
-    | 8 -> Src "images\Unbenannt9.png"
-    | _ -> Src "images\Unbenannt.png"
+let chooseImages modelFeld =
+    match modelFeld with
+    | (1,1) -> Src "images\Unbenannt2.png"
+    | (2,2) -> Src "images\Unbenannt3.png"
+    | (3,3) -> Src "images\Unbenannt4.png"
+    | (4,4) -> Src "images\Unbenannt5.png"
+    | (5,5) -> Src "images\Unbenannt6.png"
+    | (6,6) -> Src "images\Unbenannt7.png"
+    | (7,7) -> Src "images\Unbenannt8.png"
+    | (8,8) -> Src "images\Unbenannt9.png"
+    | (_) -> Src "images\Unbenannt.png"
     
     
+let newListListrandomImages i1 i2 model =                                                        
+    let innereListe = model.Feld.[i1]
+    let neueInnereListe =
+        innereListe
+        |> List.mapi (fun i x ->
+            if i = i2 then
+                let rndNumber = r.Next(1,9)
+                (rndNumber, rndNumber)
+            else x)
+    let neueÄußereListe =
+        model.Feld
+        |> List.mapi (fun i x -> if i = i1 then neueInnereListe else x)
+    neueÄußereListe
 
+
+let uncovered model =
+    model.Feld
+    |> List.map (fun x ->
+        x
+        |> List.filter (fun y ->
+            y <> (0,0) &&
+            y <> (0,1) &&
+            y <> (0,2) &&
+            y <> (0,3) &&
+            y <> (0,4) &&
+            y <> (0,5) &&
+            y <> (0,6) &&
+            y <> (0,7) &&
+            y <> (0,8)
+            ))
+
+        |> List.concat
+    |> List.length
+
+
+let coverFields model =
+    
+    model.Feld
+    |> List.map (fun x ->
+        x
+        |> List.map (fun y ->
+            match y with
+                
+            | (1,1) -> (0,1)
+            | (2,2) -> (0,2)
+            | (3,3) -> (0,3)
+            | (4,4) -> (0,4)
+            | (5,5) -> (0,5)
+            | (6,6) -> (0,6)
+            | (7,7) -> (0,7)
+            | (8,8) -> (0,8)
+            | _ -> y))
+    
+//[[0,5; 0,5; 0,8; 0,5]; [0,3; 0,1; 0,4; 0,1]; [0,5; 0,3; 0,5; 0,3]; [0,7; 0,4; 0,3; 0,4]]
+//|> List.map (fun x ->
+//    x
+//    |> List.)
+    
 
 
 let view (model : Model) (dispatch : Msg -> unit) =
@@ -94,52 +151,34 @@ let view (model : Model) (dispatch : Msg -> unit) =
                 [
                     tbody [ ]
                         [
-                            //yield! [[(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]] 
                             yield! model.Feld
                             |> List.mapi (fun index1 list ->
                                 tr [][
                                     yield! list
-                                    |> List.mapi (fun index2 intMarker ->
+                                    |> List.mapi (fun index2 tuple ->
                                         td
                                             []
                                             [
                                                 
                                                 img
                                                     [
-                                                        if model.Feld.[index1].[index2] = (0,0) then
-                                                            yield Src "images\Unbenannt.png"
-                                                        else yield Src "images\Unbenannt2.png"
-
-
-                                                        let (showNumber, isNumber) = intMarker
-
-
-                                                        let neueListListHerstellen i1 i2 =                                                        
-                                                            let innereListe = model.Feld.[i1]
-                                                            let neueInnereListe =
-                                                                innereListe
-                                                                |> List.mapi (fun i x ->
-                                                                    if i = i2 then
-                                                                        
-                                                                        (showNumber+1, isNumber+1)
-                                                                    else x)
-                                                            let neueÄußereListe =
-                                                                model.Feld
-                                                                |> List.mapi (fun i x -> if i = i1 then neueInnereListe else x)
-                                                            neueÄußereListe
-                                                        if model.Feld.[index1].[index2] = (0,0) then //damit nicht doppelt gedrückt werden kann
+                                                        yield chooseImages model.Feld.[index1].[index2]
+                                                        
+                                                        if //damit nicht doppelt gedrückt werden kann
+                                                            model.Feld.[index1].[index2] = (0,0) ||
+                                                            model.Feld.[index1].[index2] = (0,1) ||
+                                                            model.Feld.[index1].[index2] = (0,2) ||
+                                                            model.Feld.[index1].[index2] = (0,3) ||
+                                                            model.Feld.[index1].[index2] = (0,4) ||
+                                                            model.Feld.[index1].[index2] = (0,5) ||
+                                                            model.Feld.[index1].[index2] = (0,6) ||
+                                                            model.Feld.[index1].[index2] = (0,7) ||
+                                                            model.Feld.[index1].[index2] = (0,8)
+                                                        then 
                                                             yield OnClick (fun _ ->
-                                                                dispatch (Bildwechsel (neueListListHerstellen index1 index2))
-                                                                let howManyNot0 =
-                                                                    model.Feld
-                                                                    |> List.map (fun x ->
-                                                                        x
-                                                                        |> List.filter (fun y ->
-                                                                            y <> (0,0)))
+                                                                dispatch (Bildwechsel (newListListrandomImages index1 index2 model))
 
-                                                                        |> List.concat
-                                                                    |> List.length
-                                                                if howManyNot0 = 2 then dispatch (AlleZudecken)
+                                                                if (uncovered model) = 2 then dispatch (AlleZudecken (coverFields model))
                                                                     
                                                             )
                                                         
@@ -156,6 +195,8 @@ let view (model : Model) (dispatch : Msg -> unit) =
 
                         ]
                 ]
+            p [] [ str (sprintf "%A" model.Feld)]
+                 
         ]
 
 #if DEBUG
