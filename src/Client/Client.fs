@@ -13,10 +13,6 @@ open Shared
 
 open System
 
-// The model holds data that you want to keep track of while the application is running
-// in this case, we are keeping track of a counter
-// we mark it as optional, because initially it will not be available from the client
-// the initial value will be requested from server
 
 type Visibility =
     | Visible
@@ -29,15 +25,13 @@ type Matched =
 
 type Model = {
     A1: Visibility * Matched
-    Feld: (int * int) list list
+    Feld: (int * int) list list // visibility * type of picture
     }
 
 type Msg =
-    | Bildwechsel of (int * int) list list
-    | AlleZudecken of (int*int) list list
+    | SwitchImage of (int * int) list list
+    | CoverAll of (int*int) list list
 
-
-let initialCounter () = Fetch.fetchAs<Counter> "/api/init"
 
 let init () : Model * Cmd<Msg> =
     let initialModel = {
@@ -49,52 +43,90 @@ let init () : Model * Cmd<Msg> =
 
 let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
     match  msg with
-    | Bildwechsel newList ->
-        
+    | SwitchImage newList ->        
         let nextModel = {
             currentModel with
                 A1 = Visible, Unmatched
                 Feld = newList
                 }
         nextModel, Cmd.none
-    | AlleZudecken newList ->
+    | CoverAll newList ->
         let nextModel = {
             currentModel with
                 A1 = Visible, Unmatched
                 Feld = newList
                 }
         nextModel, Cmd.none
+
         
 let r = Random()
 
+
+//####visibility and value of image
 let chooseImages modelFeld =
     match modelFeld with
-    | (1,1) -> Src "images\Unbenannt2.png"
-    | (2,2) -> Src "images\Unbenannt3.png"
-    | (3,3) -> Src "images\Unbenannt4.png"
-    | (4,4) -> Src "images\Unbenannt5.png"
-    | (5,5) -> Src "images\Unbenannt6.png"
-    | (6,6) -> Src "images\Unbenannt7.png"
-    | (7,7) -> Src "images\Unbenannt8.png"
-    | (8,8) -> Src "images\Unbenannt9.png"
+    | (1,_) -> Src "images\Unbenannt2.png"
+    | (2,_) -> Src "images\Unbenannt3.png"
+    | (3,_) -> Src "images\Unbenannt4.png"
+    | (4,_) -> Src "images\Unbenannt5.png"
+    | (5,_) -> Src "images\Unbenannt6.png"
+    | (6,_) -> Src "images\Unbenannt7.png"
+    | (7,_) -> Src "images\Unbenannt8.png"
+    | (8,_) -> Src "images\Unbenannt9.png"
     | (_) -> Src "images\Unbenannt.png"
     
+
+//####how many images are already set 
+//let tuple = 0,3
+let howManyImagesOfOneType model rndNumber =
+    //[[0,5; 0,5; 0,8; 0,5]; [0,3; 0,1; 0,4; 0,1]; [0,5; 0,3; 0,5; 0,3]; [0,7; 0,4; 0,3; 0,4]]
+    model.Feld
+    |> List.concat
+    |> List.filter (fun x -> x = (rndNumber, rndNumber) || x = (0, rndNumber))
+    |> List.length
+
+
+//####how many images are already set 
+let howManyImagesOfOnePairOpen model index1 index2 =
+    let (visible, image) = model.Feld.[index1].[index2]
+    model.Feld
+    |> List.concat
+    |> List.filter (fun x -> x = (image,image) && x <> (0,0))
+    |> List.length
+
+
+//####set random number while not 2 same numbers --> if 2, then new random number    
+let rec setRandomNumberForImages model howManyImagesOfOneType = 
+    let rndNumber = r.Next(1,9)
+    match (howManyImagesOfOneType model rndNumber) with
+    | 2 -> setRandomNumberForImages model (howManyImagesOfOneType) 
+    | _ -> (rndNumber, rndNumber)
+
+
+////####uncover already set random number (image)
+//let unvocerImage (model:Model) i1 i2 =
+//    model.Feld.[i1].[i2] //exaktes feld
     
+
+//####build new list for model
 let newListListrandomImages i1 i2 model =                                                        
     let innereListe = model.Feld.[i1]
     let neueInnereListe =
         innereListe
         |> List.mapi (fun i x ->
-            if i = i2 then
-                let rndNumber = r.Next(1,9)
-                (rndNumber, rndNumber)
+            if i = i2 && x = (0,0) then
+                setRandomNumberForImages model howManyImagesOfOneType
+            //####if number already set, just switch first part of tuple (uncover image without changing set number/image)
+            elif i = i2 && x <> (0,0) then
+                let (visible, image) = x
+                (image, image)
             else x)
     let neueÄußereListe =
         model.Feld
         |> List.mapi (fun i x -> if i = i1 then neueInnereListe else x)
     neueÄußereListe
 
-
+//####how many uncovered?
 let uncovered model =
     model.Feld
     |> List.map (fun x ->
@@ -110,14 +142,14 @@ let uncovered model =
             y <> (0,7) &&
             y <> (0,8)
             ))
-
         |> List.concat
     |> List.length
 
 
-let coverFields model =
-    
-    model.Feld
+//#### set uncovered to covered
+let coverFields feld =
+
+    feld
     |> List.map (fun x ->
         x
         |> List.map (fun y ->
@@ -132,11 +164,15 @@ let coverFields model =
             | (7,7) -> (0,7)
             | (8,8) -> (0,8)
             | _ -> y))
-    
-//[[0,5; 0,5; 0,8; 0,5]; [0,3; 0,1; 0,4; 0,1]; [0,5; 0,3; 0,5; 0,3]; [0,7; 0,4; 0,3; 0,4]]
-//|> List.map (fun x ->
-//    x
-//    |> List.)
+
+let createNewListe feld =
+                                                                
+    feld
+    |> List.map (fun x ->
+        x
+        |> List.map (fun y ->
+            let (visible, value) = y
+            (visible, 0)))
     
 
 
@@ -162,27 +198,30 @@ let view (model : Model) (dispatch : Msg -> unit) =
                                                 
                                                 img
                                                     [
-                                                        yield chooseImages model.Feld.[index1].[index2]
                                                         
-                                                        if //damit nicht doppelt gedrückt werden kann
-                                                            model.Feld.[index1].[index2] = (0,0) ||
-                                                            model.Feld.[index1].[index2] = (0,1) ||
-                                                            model.Feld.[index1].[index2] = (0,2) ||
-                                                            model.Feld.[index1].[index2] = (0,3) ||
-                                                            model.Feld.[index1].[index2] = (0,4) ||
-                                                            model.Feld.[index1].[index2] = (0,5) ||
-                                                            model.Feld.[index1].[index2] = (0,6) ||
-                                                            model.Feld.[index1].[index2] = (0,7) ||
-                                                            model.Feld.[index1].[index2] = (0,8)
-                                                        then 
-                                                            yield OnClick (fun _ ->
-                                                                dispatch (Bildwechsel (newListListrandomImages index1 index2 model))
+                                                        chooseImages model.Feld.[index1].[index2] //visibility and value
+                                                        
 
-                                                                if (uncovered model) = 2 then dispatch (AlleZudecken (coverFields model))
+                                                        OnClick (fun _ ->
+                                                            dispatch (SwitchImage (newListListrandomImages index1 index2 model))
+
+                                                            if (uncovered model) = 2 //&& (howManyImagesOfOnePairOpen model index1 index2) <> 2 //funktioniert nicht
+                                                            then dispatch (CoverAll (coverFields model.Feld))
+
+
+                                                            elif (howManyImagesOfOnePairOpen model index1 index2) = 2 //if funktioniert nicht --> nochmal prüfen
+                                                            then
+                                                                
+                                                                dispatch (CoverAll (coverFields (createNewListe model.Feld) ))
+                                                                //neue liste mit betroffenen feldern auf (zahl,0) machen
+                                                                //dispatch cover neueListe
                                                                     
                                                             )
                                                         
-                                                    ]])
+                                                    ]
+                                                str (sprintf "%A" (howManyImagesOfOnePairOpen model index1 index2))
+                                                str (sprintf "%A" (uncovered model))
+                                                    ])
                                                
                                                 
                                             
@@ -196,6 +235,7 @@ let view (model : Model) (dispatch : Msg -> unit) =
                         ]
                 ]
             p [] [ str (sprintf "%A" model.Feld)]
+            p [] [ str (sprintf "%A" (createNewListe model.Feld))]
                  
         ]
 
