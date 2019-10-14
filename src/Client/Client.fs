@@ -25,42 +25,87 @@ type Matched =
     
 
 type Model = {
-    Feld: (int * int) list list // visibility * type of picture
+    Field: (int * int) list list // visibility * type of picture
     }
 
 type Msg =
     | SwitchImage of (int * int) list list
-    | SwitchSecondImage of (int * int) list list
+    | SwitchSecondImage of (int * int) list list // oder ein if in switch image, je nachdem of eins offen ist oder keins
+    | CheckIfPair of (int * int) list list
     | Cover of (int*int) list list
 
 
 let init () : Model * Cmd<Msg> =
     let initialModel = {
-        Feld = [[(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]] 
+        Field = [[(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]] 
         }
     initialModel, Cmd.none
 
 
 let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
     match  msg with
-    | SwitchImage newList ->        
+    | SwitchImage newField ->        
         let nextModel = {
             currentModel with
-                Feld = newList
+                Field = newField
                 }
         nextModel, Cmd.none
-    | SwitchSecondImage newList ->        //prüfen ob bild doppelt
+    //####after switching 2nd image, check if a pair is visible
+    | SwitchSecondImage newField ->     
         let nextModel = {
             currentModel with
-                Feld = newList
+                Field = newField
                 }
+        let msgCheckPair =Cmd.ofMsg (CheckIfPair nextModel.Field) 
+        nextModel, msgCheckPair
+    | CheckIfPair fieldAfterSecondSwith ->
+        //####pair if 2 tuples with same values, e.g. (1,1); (1,1) = pair -- (1,1); (2,2) <> pair
+        //####pair if = 1
+        let checkIfPair =
+            fieldAfterSecondSwith
+            |> List.map (fun x ->
+                x
+                |> List.filter (fun y ->
+                    let (visible, image) = y
+                    visible = image && visible <> 0
+                    ))
+            |> List.concat
+            |> List.distinct
+
+        //####change model if pair
+        let nextModel =
+            if checkIfPair.Length = 1 then
+                let shownImage =
+                    checkIfPair |> List.exactlyOne
+                let newField =
+                    fieldAfterSecondSwith
+                    //[[0,0; 0,0; 0,0; 0,0]; [0,0; 0,6; 1,0; 6,6]; [7,0; 0,8; 5,0; 1,0]; [2,0; 5,0; 0,3; 7,0]]
+                    |> List.map (fun x ->
+                        x
+                        |> List.map (fun y ->
+                            let (visible, image) = y
+                            if y = shownImage then (image, 0) else y))
+                {
+                    currentModel with
+                        Field = newField
+                }
+            else currentModel
         nextModel, Cmd.none
     | Cover newList ->
+        let newNewList =
+            newList
+            |> List.map (fun x ->
+                x
+                |> List.map (fun y ->
+                    let (a,b) = y
+                    if b = 0 && a <> 0 then (a,0) // = y
+                    else (0,b)))
         let nextModel = {
             currentModel with
-                Feld = newList
+                Field = newNewList
                 }
-        nextModel, Cmd.none
+        let msgSwitchImage = Cmd.ofMsg (SwitchImage)
+        nextModel, Cmd.none //wenn alle  möglichkeiten - 2 = (x,0) dann switch image
 
         
 let r = Random()
@@ -84,18 +129,9 @@ let showImages modelFeld =
 //let tuple = 0,3
 let howManyImagesOfOneType model rndImage =
     //[[0,5; 0,5; 0,8; 0,5]; [0,3; 0,1; 0,4; 0,1]; [0,5; 0,3; 0,5; 0,3]; [0,7; 0,4; 0,3; 0,4]]
-    model.Feld
+    model.Field
     |> List.concat
-    |> List.filter (fun x -> x = (rndImage, rndImage) || x = (0, rndImage))
-    |> List.length
-
-
-//####how many images of one pair are visible
-let howManyImagesOfOnePairOpen model index1 index2 =
-    let (visible, image) = model.Feld.[index1].[index2]
-    model.Feld
-    |> List.concat
-    |> List.filter (fun x -> x = (image,image) && x <> (0,0))
+    |> List.filter (fun x -> x = (rndImage, rndImage) || x = (0, rndImage) || x = (rndImage, 0))
     |> List.length
 
 
@@ -107,11 +143,11 @@ let rec setRandomNumberForImages model howManyImagesOfOneType =
     | _ -> (rndNumber, rndNumber)
     
 
-//####build new list for model (switch cover), set images on Click
-let listListWithUncoveresImages i1 i2 model =                                                        
-    let innereListe = model.Feld.[i1]
-    let neueInnereListe =
-        innereListe
+//####uncover tiles for SwitchCover
+let uncoverTiles i1 i2 model =                                                        
+    let innerList = model.Field.[i1]
+    let newInnerList =
+        innerList
         |> List.mapi (fun i x ->
             //####set new image to tile
             if i = i2 && x = (0,0) then
@@ -121,66 +157,34 @@ let listListWithUncoveresImages i1 i2 model =
                 let (visible, image) = x
                 (image, image)
             else x)
-    let neueÄußereListe =
-        model.Feld
-        |> List.mapi (fun i x -> if i = i1 then neueInnereListe else x)
-    neueÄußereListe
-
-
-//#### which tiles should be covered
-let createNewListe model index1 index2 =                                                                
-    model.Feld
-    |> List.map (fun x ->
-        x
-        |> List.map (fun y ->
-            //herausfinden, welche eines Paares offen sind - wenn die Fktn ausgeführt wird, sind immer 2 offen (if beim Aufruf)
-
-            //gerade in der Liste durchlaufen
-            let (visibleList, imageList) = y
-            //wenn y das gleiche wie angewählt
-            if y = model.Feld.[index1].[index2] then (visibleList, 0) else y
-            ))
+    let newField =
+        model.Field
+        |> List.mapi (fun i x -> if i = i1 then newInnerList else x)
+    newField
 
 
 //####how many uncovered?
 let howManyUncovered model =
-    model.Feld
+    model.Field
     |> List.map (fun x ->
         x
         |> List.filter (fun y ->
-            y = (1,1) ||
-            y = (2,2) ||
-            y = (3,3) ||
-            y = (4,4) ||
-            y = (5,5) ||
-            y = (6,6) ||
-            y = (7,7) ||
-            y = (8,8) 
+            let (visible, image) = y
+            visible = image && visible <> 0 // y = (1,1) || (2,2) ....
             ))
         |> List.concat
     |> List.length
 
 
-//#### set uncovered to covered
+//#### set uncovered to covered, remeber images
 let coverFields feld =
 
     feld
     |> List.map (fun x ->
         x
         |> List.map (fun y ->
-            match y with
-                
-            | (1,1) -> (0,1)
-            | (2,2) -> (0,2)
-            | (3,3) -> (0,3)
-            | (4,4) -> (0,4)
-            | (5,5) -> (0,5)
-            | (6,6) -> (0,6)
-            | (7,7) -> (0,7)
-            | (8,8) -> (0,8)
-            | _ -> y))
-
-    
+            let (visible, image) = y
+            if visible = image && visible <> 0 then (0, image) else y))
 
 
 let view (model : Model) (dispatch : Msg -> unit) =
@@ -194,7 +198,7 @@ let view (model : Model) (dispatch : Msg -> unit) =
                 [
                     tbody [ ]
                         [
-                            yield! model.Feld
+                            yield! model.Field
                             |> List.mapi (fun index1 list ->
                                 tr [][
                                     yield! list
@@ -206,39 +210,45 @@ let view (model : Model) (dispatch : Msg -> unit) =
                                                 img
                                                     [
                                                         
-                                                        yield showImages model.Feld.[index1].[index2] //visibility and value
+                                                        yield showImages model.Field.[index1].[index2] //visibility and value
 
-                                                        if
-                                                            tuple <> (1,0) || //warum kann man trotzdem klicken?
-                                                            tuple <> (2,0) ||
-                                                            tuple <> (3,0) ||
-                                                            tuple <> (4,0) ||
-                                                            tuple <> (5,0) ||
-                                                            tuple <> (6,0) ||
-                                                            tuple <> (7,0) ||
-                                                            tuple <> (8,0) 
+                                                        //if                        //FUNKTIONIERT NICHT!!!! WARUM!!
+                                                        //    tuple <> (1,0) ||
+                                                        //    tuple <> (2,0) ||
+                                                        //    tuple <> (3,0) ||
+                                                        //    tuple <> (4,0) ||
+                                                        //    tuple <> (5,0) ||
+                                                        //    tuple <> (6,0) ||
+                                                        //    tuple <> (7,0) ||
+                                                        //    tuple <> (8,0) 
 
-                                                        then
+                                                        //then
 
-                                                            yield OnClick (fun _ ->
-                                                                //dispatch (SwitchImage (newListListrandomImages index1 index2 model))
-
-                                                                match ((howManyUncovered model), (howManyImagesOfOnePairOpen model index1 index2)) with
-                                                                | (1,_) -> dispatch (SwitchImage (listListWithUncoveresImages index1 index2 model))
-                                                                    //bei 1,0 muss anstatt siwtch image ein anderes switch image rein, in dem geprüft wird, ob es 2 gleiche gibt
-                                                                    //diese müssen dann dort auf x,0 gesetzt werden
-                                                                | (0,_) -> dispatch (SwitchImage (listListWithUncoveresImages index1 index2 model))
-                                                                | (2,2) -> dispatch (Cover (coverFields (createNewListe model index1 index2) )) //wenn ich obiges gemacht habe, weiß ich nicht, ob ich das noch brauche
-                                                                | (2,_) -> dispatch (Cover (coverFields model.Feld))
+                                                        yield OnClick (fun _ ->
+                                                                
+                                                                
+                                                            match (howManyUncovered model) with //(howManyImagesOfOnePairOpen model index1 index2)
+                                                            | 1 ->
+                                                                match model.Field.[index1].[index2] with
+                                                                //#### cant click visible image another time, because upper if doesnt work??
+                                                                | (0,_) ->
+                                                                    dispatch (SwitchSecondImage (uncoverTiles index1 index2 model))
                                                                 | _ -> ()
+                                                            | 0 ->
+                                                                match model.Field.[index1].[index2] with
+                                                                //#### cant click visible image another time, because upper if doesnt work??
+                                                                | (0,_) ->
+                                                                    dispatch (SwitchImage (uncoverTiles index1 index2 model))
+                                                                | _ -> ()
+                                                            | 2 ->
+                                                                dispatch (Cover (coverFields model.Field))
+                                                            | _ -> ()
                                                                     
-                                                                )
+                                                            )
+                                                    
                                                         
                                                     ]
-                                                p [] [ str (sprintf "%A: Anzahl Bilder ein Paar" (howManyImagesOfOnePairOpen model index1 index2))]
                                                 p [] [ str (sprintf "%A: Anzahl offen" (howManyUncovered model))]
-                                                p [] [ str (sprintf "%A: vor Liste zudecken" (createNewListe model index1 index2))]
-                                                p [] [ str (sprintf "%A: Produkt Liste zudecken" (coverFields (createNewListe model index1 index2)))]
                                                     ])
                                                
                                                 
@@ -252,8 +262,7 @@ let view (model : Model) (dispatch : Msg -> unit) =
 
                         ]
                 ]
-            p [] [ str (sprintf "%A : Modell" model.Feld)]
-            p [] [ str (sprintf "%A : geändertes modell, wenn keine Paare" (coverFields model.Feld))]
+            p [] [ str (sprintf "%A : Modell" model.Field)]
                  
         ]
 
