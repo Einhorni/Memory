@@ -10,35 +10,29 @@ open Fulma
 open Thoth.Json
 open Shared
 open Fable.Import
-
-
 open System
 open Fulma
+open System.Net.Security
 
-
-type Visibility =
-    | Visible
-    | Invisible
-
-type Matched =
-    | Matched
-    | Unmatched
     
-
 type Model = {
     Field: (int * int) list list // visibility * type of picture
+    MaxRndNumber: int
     }
+
 
 type Msg =
     | SwitchImage of (int * int) list list
     | SwitchSecondImage of (int * int) list list // oder ein if in switch image, je nachdem of eins offen ist oder keins
     | CheckIfPair of (int * int) list list
     | Cover of (int*int) list list
+    | BuildField of ((int*int) list list) * int
 
 
 let init () : Model * Cmd<Msg> =
     let initialModel = {
-        Field = [[(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]] 
+        Field = [[]] //[[(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]]
+        MaxRndNumber = 0
         }
     initialModel, Cmd.none
 
@@ -105,8 +99,14 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
             currentModel with
                 Field = newNewList
                 }
-        let msgSwitchImage = Cmd.ofMsg (SwitchImage)
-        nextModel, Cmd.none //wenn alle  möglichkeiten - 2 = (x,0) dann switch image
+        nextModel, Cmd.none
+    | BuildField (playField, maxRndNumber) ->
+        let nextModel = {
+            currentModel with
+                Field = playField
+                MaxRndNumber = maxRndNumber
+                }
+        nextModel, Cmd.none
 
         
 let r = Random()
@@ -123,6 +123,12 @@ let showImages modelFeld =
     | (6,_) -> Src "images\Unbenannt7.png"
     | (7,_) -> Src "images\Unbenannt8.png"
     | (8,_) -> Src "images\Unbenannt9.png"
+    | (9,_) -> Src "images\Unbenannt10.png"
+    | (10,_) -> Src "images\Unbenannt11.png"
+    | (11,_) -> Src "images\Unbenannt12.png"
+    | (12,_) -> Src "images\Unbenannt13.png"
+    | (13,_) -> Src "images\Unbenannt14.png"
+    | (14,_) -> Src "images\Unbenannt15.png"
     | (_) -> Src "images\Unbenannt.png"
     
 
@@ -136,7 +142,7 @@ let howManyImagesOfOneType model rndImage =
 
 //####set random number(image) while not 2 same numbers(image) --> if 2, then new random number(image)    
 let rec setRandomNumberForImages model howManyImagesOfOneType = 
-    let rndNumber = r.Next(1,9)
+    let rndNumber = r.Next(1,model.MaxRndNumber)
     match (howManyImagesOfOneType model rndNumber) with
     | 2 -> setRandomNumberForImages model (howManyImagesOfOneType) 
     | _ -> (rndNumber, rndNumber)
@@ -189,11 +195,47 @@ let coverFields feld =
 let view (model : Model) (dispatch : Msg -> unit) =
     div [ ]
         [
+            Columns.columns
+                [ ][
+                    Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ]
+                    Column.column [ Column.Width (Screen.All, Column.Is8) ] [ ]
+                    Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] ]
+
 
             Columns.columns
                 [ ][
-                    Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] 
-                    Column.column [ Column.Width (Screen.All, Column.Is8) ] [ p [ ] [ str "User wählt Größe Spielfeld aus. Modell muss geändert werden: model.Field und die Zufallszahl für die Bildauswahl"]]
+                    Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ]
+                    Column.column [ Column.Width (Screen.All, Column.Is8) ] [
+                        //####Choose size of playfield
+                        Button.button
+                            [
+                                Button.OnClick (fun _ -> dispatch (BuildField ([[(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]], 9)) )
+                                Button.IsOutlined
+                                Button.Color IsBlack
+                                Button.Size IsLarge
+                                Button.Option.Props [ Style [ Margin "20px"] ]
+
+                            ]
+                            [ str "Mittel: 4x4"]
+                        Button.button
+                            [
+                                Button.OnClick (fun _ -> dispatch (BuildField ([[(0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0)]], 7)) )
+                                Button.IsOutlined
+                                Button.Color IsBlack
+                                Button.Option.Props [ Style [ Margin "20px"] ]
+                                Button.Size IsLarge
+                            ]
+                            [ str "Leicht: 3x4"]
+                        Button.button
+                            [
+                                Button.OnClick (fun _ -> dispatch (BuildField ([[(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]], 15)) )
+                                Button.IsOutlined
+                                Button.Color IsBlack
+                                Button.Option.Props [ Style [ Margin "20px"] ]
+                                Button.Size IsLarge
+                            ]
+                            [ str "Schwer: 7x4"]
+                        ]
                     Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] ]
 
 
@@ -201,15 +243,16 @@ let view (model : Model) (dispatch : Msg -> unit) =
                 [ ][
                     Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] 
                     Column.column [ Column.Width (Screen.All, Column.Is8) ] [
+                            //####playField
                             table
-                                [ Style [ CSSProp.Border "10 solid"; CSSProp.Margin "auto" ] ] [
+                                [ Style [ CSSProp.Margin "auto" ] ] [
                                     tbody [ ] [
                                         yield! model.Field
                                         |> List.mapi (fun index1 list ->
                                             tr [][
                                                 yield! list
                                                 |> List.mapi (fun index2 tuple ->
-                                                    td [] [
+                                                    td [ Style [ CSSProp.Padding "10px" ] ] [
                                                         img [
                                                             yield showImages model.Field.[index1].[index2] //visibility and value
 
@@ -237,12 +280,8 @@ let view (model : Model) (dispatch : Msg -> unit) =
                     Column.column [ Column.Width (Screen.All, Column.Is2) ] [] 
                     ] //columns
             p [] [ str (sprintf "%A : Modell" model.Field)]
-            
-            //p [] [
-            //    let timer = new System.Timers.Timer()
-            //    let start = timer.Start
-                
-            //    str (sprintf "%A Modell"  start)]                 
+
+               
         ]
 
 #if DEBUG
