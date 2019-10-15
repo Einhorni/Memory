@@ -13,6 +13,7 @@ open Fable.Import
 
 
 open System
+open Fulma
 
 
 type Visibility =
@@ -126,9 +127,7 @@ let showImages modelFeld =
     
 
 //####how many images are already set 
-//let tuple = 0,3
 let howManyImagesOfOneType model rndImage =
-    //[[0,5; 0,5; 0,8; 0,5]; [0,3; 0,1; 0,4; 0,1]; [0,5; 0,3; 0,5; 0,3]; [0,7; 0,4; 0,3; 0,4]]
     model.Field
     |> List.concat
     |> List.filter (fun x -> x = (rndImage, rndImage) || x = (0, rndImage) || x = (rndImage, 0))
@@ -188,82 +187,62 @@ let coverFields feld =
 
 
 let view (model : Model) (dispatch : Msg -> unit) =
-    div []
-        [ 
-            table [ Style
-                [
-                    CSSProp.Border "1 solid"
-                    
-                ] ]
-                [
-                    tbody [ ]
-                        [
-                            yield! model.Field
-                            |> List.mapi (fun index1 list ->
-                                tr [][
-                                    yield! list
-                                    |> List.mapi (fun index2 tuple ->
-                                        td
-                                            []
-                                            [
-                                                
-                                                img
-                                                    [
-                                                        
-                                                        yield showImages model.Field.[index1].[index2] //visibility and value
+    div [ ]
+        [
 
-                                                        //if                        //FUNKTIONIERT NICHT!!!! WARUM!!
-                                                        //    tuple <> (1,0) ||
-                                                        //    tuple <> (2,0) ||
-                                                        //    tuple <> (3,0) ||
-                                                        //    tuple <> (4,0) ||
-                                                        //    tuple <> (5,0) ||
-                                                        //    tuple <> (6,0) ||
-                                                        //    tuple <> (7,0) ||
-                                                        //    tuple <> (8,0) 
-
-                                                        //then
-
-                                                        yield OnClick (fun _ ->
-                                                                
-                                                                
-                                                            match (howManyUncovered model) with //(howManyImagesOfOnePairOpen model index1 index2)
-                                                            | 1 ->
-                                                                match model.Field.[index1].[index2] with
-                                                                //#### cant click visible image another time, because upper if doesnt work??
-                                                                | (0,_) ->
-                                                                    dispatch (SwitchSecondImage (uncoverTiles index1 index2 model))
-                                                                | _ -> ()
-                                                            | 0 ->
-                                                                match model.Field.[index1].[index2] with
-                                                                //#### cant click visible image another time, because upper if doesnt work??
-                                                                | (0,_) ->
-                                                                    dispatch (SwitchImage (uncoverTiles index1 index2 model))
-                                                                | _ -> ()
-                                                            | 2 ->
-                                                                dispatch (Cover (coverFields model.Field))
-                                                            | _ -> ()
-                                                                    
-                                                            )
-                                                    
-                                                        
-                                                    ]
-                                                p [] [ str (sprintf "%A: Anzahl offen" (howManyUncovered model))]
-                                                    ])
-                                               
-                                                
-                                            
-                                        ])
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+            Columns.columns
+                [ ][
+                    Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] 
+                    Column.column [ Column.Width (Screen.All, Column.Is8) ] [ p [ ] [ str "User wählt Größe Spielfeld aus. Modell muss geändert werden: model.Field und die Zufallszahl für die Bildauswahl"]]
+                    Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] ]
 
 
+            Columns.columns
+                [ ][
+                    Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] 
+                    Column.column [ Column.Width (Screen.All, Column.Is8) ] [
+                            table
+                                [ Style [ CSSProp.Border "10 solid"; CSSProp.Margin "auto" ] ] [
+                                    tbody [ ] [
+                                        yield! model.Field
+                                        |> List.mapi (fun index1 list ->
+                                            tr [][
+                                                yield! list
+                                                |> List.mapi (fun index2 tuple ->
+                                                    td [] [
+                                                        img [
+                                                            yield showImages model.Field.[index1].[index2] //visibility and value
 
-
-
-                        ]
-                ]
+                                                            yield OnClick (fun _ ->   
+                                                                match (howManyUncovered model) with //(howManyImagesOfOnePairOpen model index1 index2)
+                                                                | 1 ->
+                                                                    match model.Field.[index1].[index2] with
+                                                                    //#### cant click visible image another time, because upper if doesnt work??
+                                                                    | (0,_) ->
+                                                                        dispatch (SwitchSecondImage (uncoverTiles index1 index2 model))
+                                                                    | _ -> ()
+                                                                | 0 ->
+                                                                    match model.Field.[index1].[index2] with
+                                                                    //#### cant click visible image another time, because upper if doesnt work??
+                                                                    | (0,_) ->
+                                                                        dispatch (SwitchImage (uncoverTiles index1 index2 model))
+                                                                    | _ -> ()
+                                                                | 2 ->
+                                                                    dispatch (Cover (coverFields model.Field))
+                                                                | _ -> ())] //img
+                                                        //p [] [ str (sprintf "%A: Anzahl offen" (howManyUncovered model))]
+                                        ])])] //tbody
+                                ] //table
+                        ] //column
+                    Column.column [ Column.Width (Screen.All, Column.Is2) ] [] 
+                    ] //columns
             p [] [ str (sprintf "%A : Modell" model.Field)]
-                 
+            
+            //p [] [
+            //    let timer = new System.Timers.Timer()
+            //    let start = timer.Start
+                
+            //    str (sprintf "%A Modell"  start)]                 
         ]
 
 #if DEBUG
