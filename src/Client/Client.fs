@@ -13,32 +13,52 @@ open Fable.Import
 open System
 open Fulma
 open System.Net.Security
+open Fable.FontAwesome.Free
+open System.Globalization
+
+
 
     
 type Model = {
     Field: (int * int) list list // visibility * type of picture
     MaxRndNumber: int
+    StartTime: DateTime
+    EndTime: DateTime
+    Won: bool
     }
 
 
 type Msg =
+    | SwitchFirstImage of (int * int) list list
     | SwitchImage of (int * int) list list
     | SwitchSecondImage of (int * int) list list // oder ein if in switch image, je nachdem of eins offen ist oder keins
     | CheckIfPair of (int * int) list list
     | Cover of (int*int) list list
     | BuildField of ((int*int) list list) * int
+    | Won
 
 
 let init () : Model * Cmd<Msg> =
     let initialModel = {
         Field = [[]] //[[(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]]
         MaxRndNumber = 0
+        StartTime = DateTime.Now
+        EndTime = DateTime.Now
+        Won = false
         }
     initialModel, Cmd.none
 
 
 let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
     match  msg with
+    //## and set StartTime
+    | SwitchFirstImage newField ->        
+        let nextModel = {
+            currentModel with
+                Field = newField
+                StartTime = DateTime.Now
+                }
+        nextModel, Cmd.none
     | SwitchImage newField ->        
         let nextModel = {
             currentModel with
@@ -51,13 +71,13 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
             currentModel with
                 Field = newField
                 }
-        let msgCheckPair =Cmd.ofMsg (CheckIfPair nextModel.Field) 
+        let msgCheckPair = Cmd.ofMsg (CheckIfPair nextModel.Field) 
         nextModel, msgCheckPair
-    | CheckIfPair fieldAfterSecondSwith ->
+    | CheckIfPair fieldAfterSecondSwitch ->
         //####pair if 2 tuples with same values, e.g. (1,1); (1,1) = pair -- (1,1); (2,2) <> pair
         //####pair if = 1
         let checkIfPair =
-            fieldAfterSecondSwith
+            fieldAfterSecondSwitch
             |> List.map (fun x ->
                 x
                 |> List.filter (fun y ->
@@ -67,13 +87,14 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
             |> List.concat
             |> List.distinct
 
+
         //####change model if pair
         let nextModel =
             if checkIfPair.Length = 1 then
                 let shownImage =
                     checkIfPair |> List.exactlyOne
                 let newField =
-                    fieldAfterSecondSwith
+                    fieldAfterSecondSwitch
                     //[[0,0; 0,0; 0,0; 0,0]; [0,0; 0,6; 1,0; 6,6]; [7,0; 0,8; 5,0; 1,0]; [2,0; 5,0; 0,3; 7,0]]
                     |> List.map (fun x ->
                         x
@@ -85,7 +106,28 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
                         Field = newField
                 }
             else currentModel
-        nextModel, Cmd.none
+
+        //####wenn nextModel -> is won = 0 dann neue Msg -> endTime
+
+        //#### true = won
+        let isWon playField =
+            let howManyTilesUntilWon =
+                playField
+                //[[1,0; 2,0]; [1,0; 2,0]]
+                |> List.map (fun x ->
+                    x
+                    |> List.filter (fun y ->
+                        let (visible, image) = y
+                        y = (0, image) || visible = image))
+                |> List.concat
+                |> List.length
+            howManyTilesUntilWon = 0
+        
+        let wonOrInGame = 
+            if (isWon nextModel.Field) then (Cmd.ofMsg Won)
+            else Cmd.none
+
+        nextModel, wonOrInGame
     | Cover newList ->
         let newNewList =
             newList
@@ -105,7 +147,15 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
             currentModel with
                 Field = playField
                 MaxRndNumber = maxRndNumber
+                Won = false
                 }
+        nextModel, Cmd.none
+    | Won ->
+        let nextModel = {
+            currentModel with
+                Won = true
+                EndTime = DateTime.Now
+            }
         nextModel, Cmd.none
 
         
@@ -192,6 +242,25 @@ let coverFields feld =
             if visible = image && visible <> 0 then (0, image) else y))
 
 
+//#### true = new Field
+let isNewField playField =
+    let howManyUnvoveredTiles =
+        playField
+        //[[(0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0)]]
+        |> List.map (fun x ->
+            x
+            |> List.filter (fun y ->
+                y <> (0,0)))
+        |> List.concat
+        |> List.length
+    howManyUnvoveredTiles = 0
+
+
+//####
+let startTimer = DateTime.Now //ich muss irgendwie die anfangszeit speichern (erste karte umgedreht), davon muss ich die endzeit (alle umgedreht) abziehen
+let endTimer finished = DateTime.Now
+
+
 let view (model : Model) (dispatch : Msg -> unit) =
     div [ ]
         [
@@ -216,16 +285,16 @@ let view (model : Model) (dispatch : Msg -> unit) =
                                 Button.Option.Props [ Style [ Margin "20px"] ]
 
                             ]
-                            [ str "Mittel: 4x4"]
+                            [ str "Medium: 4x4"]
                         Button.button
                             [
-                                Button.OnClick (fun _ -> dispatch (BuildField ([[(0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0)]], 7)) )
+                                Button.OnClick (fun _ -> dispatch (BuildField ([[(0,0);(0,0)]; [(0,0); (0,0)]], 3)) )
                                 Button.IsOutlined
                                 Button.Color IsBlack
                                 Button.Option.Props [ Style [ Margin "20px"] ]
                                 Button.Size IsLarge
                             ]
-                            [ str "Leicht: 3x4"]
+                            [ str "Easy: 2x2"]
                         Button.button
                             [
                                 Button.OnClick (fun _ -> dispatch (BuildField ([[(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]], 15)) )
@@ -234,7 +303,7 @@ let view (model : Model) (dispatch : Msg -> unit) =
                                 Button.Option.Props [ Style [ Margin "20px"] ]
                                 Button.Size IsLarge
                             ]
-                            [ str "Schwer: 7x4"]
+                            [ str "Hard: 7x4"]
                         ]
                     Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] ]
 
@@ -268,7 +337,9 @@ let view (model : Model) (dispatch : Msg -> unit) =
                                                                     match model.Field.[index1].[index2] with
                                                                     //#### cant click visible image another time, because upper if doesnt work??
                                                                     | (0,_) ->
-                                                                        dispatch (SwitchImage (uncoverTiles index1 index2 model))
+                                                                        if (isNewField model.Field) then
+                                                                            dispatch (SwitchFirstImage (uncoverTiles index1 index2 model))
+                                                                        else dispatch (SwitchImage (uncoverTiles index1 index2 model))
                                                                     | _ -> ()
                                                                 | 2 ->
                                                                     dispatch (Cover (coverFields model.Field))
@@ -279,7 +350,37 @@ let view (model : Model) (dispatch : Msg -> unit) =
                         ] //column
                     Column.column [ Column.Width (Screen.All, Column.Is2) ] [] 
                     ] //columns
+
+
+            Columns.columns
+                [ ][
+                    Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ]
+                    Column.column [ Column.Width (Screen.All, Column.Is8) ] [
+                                    //time needed for solving
+                        p [] [
+                            if (model.EndTime > model.StartTime) then
+                                let duration = model.EndTime - model.StartTime
+                                let minutes = duration.Minutes
+                                let seconds = duration.Seconds                    
+                                if duration.Minutes > 0 then
+                                    yield str (sprintf "%A:%A: gebrauchte Zeit" (duration.Minutes.ToString()) (duration.Seconds.ToString()))
+                                else
+                                    if seconds < 10 then
+                                        let showSeconds = sprintf "0%i" seconds
+                                        yield str (sprintf "Won! Your're time is: 00:%A: gebrauchte Zeit" showSeconds)
+                            ]   
+                    ]
+                    Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] ]
+
+
+ 
+
+
+            //#####################################   LOGS
             p [] [ str (sprintf "%A : Modell" model.Field)]
+            p [] [str (sprintf "%A : Startzeit" model.StartTime )]
+            p [] [str (sprintf "%A : Endzeit" model.EndTime )]
+            
 
                
         ]
