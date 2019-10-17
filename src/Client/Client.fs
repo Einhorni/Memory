@@ -362,25 +362,34 @@ let view (model : Model) (dispatch : Msg -> unit) =
                                 let duration = model.EndTime - model.StartTime
                                 let minutes = duration.Minutes
                                 let seconds = duration.Seconds                    
-                                if duration.Minutes > 0 then
-                                    yield str (sprintf "%A:%A: gebrauchte Zeit" (duration.Minutes.ToString()) (duration.Seconds.ToString()))
+                                if seconds >= 10 then
+                                    yield str (sprintf "Won! Your time is: %A:%A" minutes seconds)
                                 else
                                     if seconds < 10 then
                                         let showSeconds = sprintf "0%i" seconds
-                                        yield str (sprintf "Won! Your're time is: 00:%A: gebrauchte Zeit" showSeconds)
+                                        yield str (sprintf "Won! Your time is: 00:%A" showSeconds)
                             ]   
                     ]
                     Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] ]
 
 
- 
+            Columns.columns
+                [ ][
+                    Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ]
+                    Column.column [ Column.Width (Screen.All, Column.Is8) ]
+                        [
+
+                            
+                            //#####################################   LOGS
+                            yield p [] [ str (sprintf "%A : Modell" model.Field)]
+                            yield p [] [str (sprintf "%A : Startzeit" model.StartTime )]
+                            yield p [] [str (sprintf "%A : Endzeit" model.EndTime )]
+
+                                        ]
+                    Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] ]
 
 
-            //#####################################   LOGS
-            p [] [ str (sprintf "%A : Modell" model.Field)]
-            p [] [str (sprintf "%A : Startzeit" model.StartTime )]
-            p [] [str (sprintf "%A : Endzeit" model.EndTime )]
-            
+
 
                
         ]
