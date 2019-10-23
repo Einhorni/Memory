@@ -388,6 +388,18 @@ let sortHighscore highscore =
     |> List.sort
 
 
+//#### mark current score in Highscore List
+let markCurrentScore model (savedScore:int*int*DateTime*Difficulty) =
+    let (minutes, seconds, date, difficulty) = savedScore
+    match model.CurrentHighscore with
+    | Some hs ->
+        let (currentHsMin, currentHsSec, currentHsDate,c) = hs
+        if currentHsDate.Day = date.Day && currentHsDate.Month = date.Month && currentHsDate.Year = date.Year &&  currentHsMin = minutes && currentHsSec = seconds then
+            ClassName "is-selected"
+        else ClassName""
+    | None -> ClassName""
+
+
 //####build highscore table
 let highscoreTable (highscoreList:(int*int*DateTime*Difficulty) list) (model:Model) =
     Table.table
@@ -406,7 +418,7 @@ let highscoreTable (highscoreList:(int*int*DateTime*Difficulty) list) (model:Mod
                     let (minutes, seconds, date, difficulty) = highscore
                     tr [ if model.CurrentHighscore = Some highscore then ClassName "is-selected" ]//???warum funktioniert das nicht?
                         [ 
-                            td []
+                            td [ markCurrentScore model highscore ]
                                 [
                                     if seconds < 10 then
                                         let secondsString = sprintf "0%i" seconds
@@ -498,8 +510,8 @@ let view (model : Model) (dispatch : Msg -> unit) =
                                                 |> List.mapi (fun index2 tuple ->
                                                     td [ Style [ CSSProp.Padding "10px" ] ] [
                                                         img [
-                                                            yield showImages model.Field.[index1].[index2]
-                                                            yield OnClick (fun _ ->   
+                                                            showImages model.Field.[index1].[index2]
+                                                            OnClick (fun _ ->   
                                                                 match (howManyUncovered model) with
                                                                 | 1 ->
                                                                     match model.Field.[index1].[index2] with
@@ -530,15 +542,15 @@ let view (model : Model) (dispatch : Msg -> unit) =
                     Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ]
                     Column.column [ Column.Width (Screen.All, Column.Is8) ] [
                                     //time needed for solving
-                        yield p [] [
+                        p [] [
                             if model.Won = true then
                                 let duration = model.EndTime - model.StartTime
                                 let minutes = duration.Minutes
                                 let seconds = duration.Seconds
                                 if seconds < 10 then
                                     let secondsString = sprintf "0%i" seconds
-                                    yield str (sprintf "Won! Your time is: 00:%A" secondsString)
-                                else yield str (sprintf "Won! Your time is: %A:%A" minutes seconds)                                        
+                                    str (sprintf "Won! Your time is: 00:%A" secondsString)
+                                else str (sprintf "Won! Your time is: %A:%A" minutes seconds)                                        
                             ]
 
                         //highscore tables
@@ -550,26 +562,30 @@ let view (model : Model) (dispatch : Msg -> unit) =
 
 
                             //--
-                            yield table
+                            table
                                 [ ]
-                                [ tr [ ]
+                                [ tbody  []
+                                 [tr [ ]
                                     [
                                         td [ ]
                                             [
+                                                str "Easy"
                                                 let (highscoreEasy, x, y) = savedHighscores model
-                                                yield highscoreTable highscoreEasy model
+                                                highscoreTable highscoreEasy model
                                             ]
                                         td [ ]
                                             [
+                                                str "Medium"
                                                 let (x, highscoresMedium, y) = savedHighscores model
-                                                yield highscoreTable highscoresMedium model
+                                                highscoreTable highscoresMedium model
                                             ]
                                         td [ ]
                                             [
+                                                str "Hard"
                                                 let (x, y, highscoresHard) = savedHighscores model
-                                                yield highscoreTable highscoresHard model
+                                                highscoreTable highscoresHard model
                                             ]
-                                    ]]
+                                    ]]]
                             
 
                             
@@ -592,8 +608,12 @@ let view (model : Model) (dispatch : Msg -> unit) =
                             yield p [] [ str (sprintf "%A : Highscore" model.CurrentHighscore)]
                             yield p [] [ str (sprintf "%A : Highscores" model.Highscores)]
 
+                            
+                            
 
-                                        ]
+                            
+
+                        ]
                     Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] ]
 
 
