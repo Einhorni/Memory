@@ -6,6 +6,11 @@
 
   <ItemGroup>
     <Compile Include="Domain.fs" />
+    <Compile Include="DataAccess.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="12.0.2" />
   </ItemGroup>
 
 </Project>

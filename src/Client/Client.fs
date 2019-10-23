@@ -15,7 +15,9 @@ open Fulma
 open System.Net.Security
 open Fable.FontAwesome.Free
 open System.Globalization
-
+open Fetch.Types
+open Fetch
+open Domain
 
 
     
@@ -25,32 +27,129 @@ type Model = {
     StartTime: DateTime
     EndTime: DateTime
     Won: bool
+    FieldDifficulty: Difficulty 
+    CurrentHighscore: (int*int*DateTime*Difficulty) option //minutes, seconds, Date, field difficulty
+    Highscores: (int*int*DateTime*Difficulty) list
+    Error: bool
+    ErrorMessage: string option
     }
 
 
 type Msg =
+    | ServerError of exn
+    | SaveHighscore of (int*int*DateTime*Difficulty)
+    | CallHighscore
+    | HighscoreCalled of (int*int*DateTime*Difficulty) list
+    | HighscoreSaved of string //oder eher kein string, bzw. nichts mitgeben
     | SwitchFirstImage of (int * int) list list
     | SwitchImage of (int * int) list list
     | SwitchSecondImage of (int * int) list list // oder ein if in switch image, je nachdem of eins offen ist oder keins
     | CheckIfPair of (int * int) list list
     | Cover of (int*int) list list
-    | BuildField of ((int*int) list list) * int
-    | Won
+    | BuildField of ((int*int) list list) * int * Difficulty
+    | Won of Model
+
+
+
+let inline meinPost<'typDerZuVersendendenDaten, 'typDerZuErhaltendenDaten> adresse (datenVonClientDieIchVersendenWill:'typDerZuVersendendenDaten) =
+    promise {
+        let zuVersendendeDatenImJSONFormat = Thoth.Json.Encode.toString 0 datenVonClientDieIchVersendenWill
+        let! responseDesRequests =
+            GlobalFetch.fetch (RequestInfo.Url adresse, requestProps
+                [
+                    //fetch sendet Daten als Post im Json Format an Server
+                    //fetch ist eine Funktion liefert die antwort des servers (response), falls es einen server gibt
+                    Fetch.Types.Method Fetch.Types.HttpMethod.POST 
+                    Fetch.requestHeaders [Fetch.Types.ContentType "application/json"] 
+                    Fetch.Types.Body (unbox(zuVersendendeDatenImJSONFormat))
+                ])
+        if responseDesRequests.Ok then
+            if typeof<'typDerZuErhaltendenDaten> = typeof<unit> then
+                //standardwert des typsDerZuErhaltendenDaten zurückgeben... weil auf unit geprüft wird, kommt hier auch immer unit zurück
+                return Unchecked.defaultof<'typDerZuErhaltendenDaten>
+            else
+                //antwort des servers in textform = json, weil wir das wissen, weil server in json antwortet
+                let! antwortDesServers = responseDesRequests.text()
+                //Decoder: damit json (antwortdesServers) wieder in das richtige Format (F-Sharp Typ) umgewandelt wird
+                let zuErhaltendeDaten = Decode.Auto.fromString<'typDerZuErhaltendenDaten> antwortDesServers
+                match zuErhaltendeDaten with
+                // wenn Umwandlung von json zum Rückgabetyp erfolgreich war - - antwortvomserver = echtes Rückgabeobjekt, brauchbare Daten
+                | Ok antwortVomServer -> return antwortVomServer
+                //bei Problemen mit Umwandlung Json zum Rückgabewerttyp im Client
+                //später kann man ersetzen mit Hilfe von: String.StartsWith("technisch")
+                | Error fehlerMeldungJsonUmwandlung -> return failwith (sprintf "technisch: %s" fehlerMeldungJsonUmwandlung)
+        else
+            let! antwortDesServers = responseDesRequests.text()
+            //response hat nicht geklappt: fehlermeldung ist vom Typ string (das eigentlich Json-String ist = von F-sharp nicht verstanden wird -> F#-String)
+            //im server formulierte fehlermeldungen
+            let zuErhaltendeFehlermeldung = Decode.Auto.fromString<string> antwortDesServers
+            match zuErhaltendeFehlermeldung with
+            | Ok zuErhaltendeFehlermeldung -> return failwith zuErhaltendeFehlermeldung
+            //bei Problemen mit Umwandlung Json zum Rückgabewerttyp im Client
+            //später kann man ersetzen mit Hilfe von: String.StartsWith("technisch")
+            | Error fehlerMeldungJsonUmwandlung -> return failwith (sprintf "technisch: %s" fehlerMeldungJsonUmwandlung)          
+    }
+
+//############# call highscore list ##############
+
+let callHighscoreList () =
+    Thoth.Fetch.Fetch.fetchAs<(int*int*DateTime*Difficulty) list> ("http://localhost:8080/api/callhighscore")
+let callHighscoreListCommand ()=
+    Cmd.OfPromise.either callHighscoreList () HighscoreCalled ServerError
+
+
+//############# save highscore ##############
+
+let saveInHighScoreList (highscore:int*int*DateTime*Difficulty) = 
+    meinPost<int*int*DateTime*Difficulty, string> "http://localhost:8080/api/savehighscore" highscore
+//    //folgendes kann weg, weil schon unit zurückkommt
+//    //|> Promise.map (fun result -> ())
+
+let saveInHighScoreListCommand highscore =
+    Cmd.OfPromise.either saveInHighScoreList highscore HighscoreSaved ServerError
+
+
+
 
 
 let init () : Model * Cmd<Msg> =
     let initialModel = {
-        Field = [[]] //[[(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]]
+        Field = [[]]
         MaxRndNumber = 0
         StartTime = DateTime.Now
         EndTime = DateTime.Now
         Won = false
+        CurrentHighscore = None
+        Highscores = []
+        FieldDifficulty = NoGame
+        Error = false
+        ErrorMessage = None
         }
     initialModel, Cmd.none
 
 
 let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
     match  msg with
+    | ServerError error ->
+        Fable.Core.JS.console.log(error)
+        let nextModel = {
+            currentModel with
+                Error = true
+                ErrorMessage = Some error.Message
+        }
+        nextModel, Cmd.none
+    | SaveHighscore highscore ->
+        currentModel, saveInHighScoreListCommand highscore
+    | CallHighscore ->
+        currentModel, callHighscoreListCommand ()
+    | HighscoreCalled highscoreList ->
+        let currentModel = {
+            currentModel with
+                Highscores =  highscoreList
+            }
+        currentModel, Cmd.none
+    | HighscoreSaved string ->
+        currentModel, Cmd.none
     //## and set StartTime
     | SwitchFirstImage newField ->        
         let nextModel = {
@@ -95,7 +194,6 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
                     checkIfPair |> List.exactlyOne
                 let newField =
                     fieldAfterSecondSwitch
-                    //[[0,0; 0,0; 0,0; 0,0]; [0,0; 0,6; 1,0; 6,6]; [7,0; 0,8; 5,0; 1,0]; [2,0; 5,0; 0,3; 7,0]]
                     |> List.map (fun x ->
                         x
                         |> List.map (fun y ->
@@ -107,13 +205,10 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
                 }
             else currentModel
 
-        //####wenn nextModel -> is won = 0 dann neue Msg -> endTime
-
         //#### true = won
         let isWon playField =
             let howManyTilesUntilWon =
                 playField
-                //[[1,0; 2,0]; [1,0; 2,0]]
                 |> List.map (fun x ->
                     x
                     |> List.filter (fun y ->
@@ -124,7 +219,7 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
             howManyTilesUntilWon = 0
         
         let wonOrInGame = 
-            if (isWon nextModel.Field) then (Cmd.ofMsg Won)
+            if (isWon nextModel.Field) then (Cmd.ofMsg (Won nextModel))
             else Cmd.none
 
         nextModel, wonOrInGame
@@ -142,21 +237,36 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
                 Field = newNewList
                 }
         nextModel, Cmd.none
-    | BuildField (playField, maxRndNumber) ->
+    | BuildField (playField, maxRndNumber, difficulty) ->
         let nextModel = {
             currentModel with
                 Field = playField
                 MaxRndNumber = maxRndNumber
                 Won = false
+                Error = false
+                FieldDifficulty = difficulty
+                CurrentHighscore = None
+                Highscores = []
                 }
         nextModel, Cmd.none
-    | Won ->
-        let nextModel = {
+    | Won model ->
+        let interModel = {
             currentModel with
                 Won = true
                 EndTime = DateTime.Now
             }
-        nextModel, Cmd.none
+
+        let duration = interModel.EndTime - model.StartTime
+        let minutes = duration.Minutes
+        let seconds = duration.Seconds                    
+        let newHighscore =
+            (minutes, seconds, DateTime.Now, model.FieldDifficulty)
+        let nextModel = {
+            interModel with
+                CurrentHighscore = Some newHighscore
+            }
+        let cmdSaveHighscore = Cmd.ofMsg (SaveHighscore newHighscore)
+        nextModel, cmdSaveHighscore
 
         
 let r = Random()
@@ -246,7 +356,6 @@ let coverFields feld =
 let isNewField playField =
     let howManyUnvoveredTiles =
         playField
-        //[[(0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0)]]
         |> List.map (fun x ->
             x
             |> List.filter (fun y ->
@@ -256,9 +365,66 @@ let isNewField playField =
     howManyUnvoveredTiles = 0
 
 
-//####
-let startTimer = DateTime.Now //ich muss irgendwie die anfangszeit speichern (erste karte umgedreht), davon muss ich die endzeit (alle umgedreht) abziehen
-let endTimer finished = DateTime.Now
+//#### higscorelists, 3 difficulties
+let savedHighscores model =
+    let (highscoresEasy, highscoresRest) =
+        model.Highscores
+        |> List.partition (fun x ->
+            let (a,b,c,difficulty) = x
+            difficulty = Easy)
+
+    let highscoresMedium, highscoresHard =
+        highscoresRest
+        |> List.partition (fun x ->
+            let (a,b,c,difficulty) = x
+            difficulty = Medium)
+
+    (highscoresEasy, highscoresMedium, highscoresHard)
+
+
+//#### sort highscoreLists
+let sortHighscore highscore =
+    highscore
+    |> List.sort
+
+
+//####build highscore table
+let highscoreTable (highscoreList:(int*int*DateTime*Difficulty) list) (model:Model) =
+    Table.table
+        []
+        [
+        thead [ ]
+            [ tr [ ]
+                    [
+                        th [ ][ str (sprintf "Time") ]
+                        th [ ][ str (sprintf "Date") ]
+                    ] ]
+        tbody []
+            [         
+                yield! sortHighscore highscoreList
+                |> List.map (fun highscore ->
+                    let (minutes, seconds, date, difficulty) = highscore
+                    tr [ if model.CurrentHighscore = Some highscore then ClassName "is-selected" ]//???warum funktioniert das nicht?
+                        [ 
+                            td []
+                                [
+                                    if seconds < 10 then
+                                        let secondsString = sprintf "0%i" seconds
+                                        yield str (sprintf "%i:%s" minutes secondsString )
+                                    else
+                                        yield str (sprintf "%i:%i" minutes seconds )
+                                ]
+                            td []
+                                [ str (sprintf "%A / %A / %A" date.Day date.Month date.Year ) ]
+                        ])
+            ]
+        ]
+
+
+
+//############################################################################
+//################################VIEW########################################
+//############################################################################
 
 
 let view (model : Model) (dispatch : Msg -> unit) =
@@ -278,7 +444,7 @@ let view (model : Model) (dispatch : Msg -> unit) =
                         //####Choose size of playfield
                         Button.button
                             [
-                                Button.OnClick (fun _ -> dispatch (BuildField ([[(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]], 9)) )
+                                Button.OnClick (fun _ -> dispatch (BuildField ([[(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]], 9, Medium)) )
                                 Button.IsOutlined
                                 Button.Color IsBlack
                                 Button.Size IsLarge
@@ -288,7 +454,7 @@ let view (model : Model) (dispatch : Msg -> unit) =
                             [ str "Medium: 4x4"]
                         Button.button
                             [
-                                Button.OnClick (fun _ -> dispatch (BuildField ([[(0,0);(0,0)]; [(0,0); (0,0)]], 3)) )
+                                Button.OnClick (fun _ -> dispatch (BuildField ([[(0,0);(0,0)]; [(0,0); (0,0)]], 3, Easy)) )
                                 Button.IsOutlined
                                 Button.Color IsBlack
                                 Button.Option.Props [ Style [ Margin "20px"] ]
@@ -297,13 +463,22 @@ let view (model : Model) (dispatch : Msg -> unit) =
                             [ str "Easy: 2x2"]
                         Button.button
                             [
-                                Button.OnClick (fun _ -> dispatch (BuildField ([[(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]], 15)) )
+                                Button.OnClick (fun _ -> dispatch (BuildField ([[(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]], 15, Hard)) )
                                 Button.IsOutlined
                                 Button.Color IsBlack
                                 Button.Option.Props [ Style [ Margin "20px"] ]
                                 Button.Size IsLarge
                             ]
                             [ str "Hard: 7x4"]
+                        Button.button
+                            [
+                                Button.OnClick (fun _ -> dispatch CallHighscore )
+                                Button.IsOutlined
+                                Button.Color IsBlack
+                                Button.Option.Props [ Style [ Margin "20px"] ]
+                                Button.Size IsLarge
+                            ]
+                            [ str "Highscores"]
                         ]
                     Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] ]
 
@@ -323,19 +498,18 @@ let view (model : Model) (dispatch : Msg -> unit) =
                                                 |> List.mapi (fun index2 tuple ->
                                                     td [ Style [ CSSProp.Padding "10px" ] ] [
                                                         img [
-                                                            yield showImages model.Field.[index1].[index2] //visibility and value
-
+                                                            yield showImages model.Field.[index1].[index2]
                                                             yield OnClick (fun _ ->   
-                                                                match (howManyUncovered model) with //(howManyImagesOfOnePairOpen model index1 index2)
+                                                                match (howManyUncovered model) with
                                                                 | 1 ->
                                                                     match model.Field.[index1].[index2] with
-                                                                    //#### cant click visible image another time, because upper if doesnt work??
+                                                                    //#### cant click visible image another time
                                                                     | (0,_) ->
                                                                         dispatch (SwitchSecondImage (uncoverTiles index1 index2 model))
                                                                     | _ -> ()
                                                                 | 0 ->
                                                                     match model.Field.[index1].[index2] with
-                                                                    //#### cant click visible image another time, because upper if doesnt work??
+                                                                    //#### cant click visible image another time
                                                                     | (0,_) ->
                                                                         if (isNewField model.Field) then
                                                                             dispatch (SwitchFirstImage (uncoverTiles index1 index2 model))
@@ -344,7 +518,6 @@ let view (model : Model) (dispatch : Msg -> unit) =
                                                                 | 2 ->
                                                                     dispatch (Cover (coverFields model.Field))
                                                                 | _ -> ())] //img
-                                                        //p [] [ str (sprintf "%A: Anzahl offen" (howManyUncovered model))]
                                         ])])] //tbody
                                 ] //table
                         ] //column
@@ -357,18 +530,52 @@ let view (model : Model) (dispatch : Msg -> unit) =
                     Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ]
                     Column.column [ Column.Width (Screen.All, Column.Is8) ] [
                                     //time needed for solving
-                        p [] [
-                            if (model.EndTime > model.StartTime) then
+                        yield p [] [
+                            if model.Won = true then
                                 let duration = model.EndTime - model.StartTime
                                 let minutes = duration.Minutes
-                                let seconds = duration.Seconds                    
-                                if seconds >= 10 then
-                                    yield str (sprintf "Won! Your time is: %A:%A" minutes seconds)
-                                else
-                                    if seconds < 10 then
-                                        let showSeconds = sprintf "0%i" seconds
-                                        yield str (sprintf "Won! Your time is: 00:%A" showSeconds)
-                            ]   
+                                let seconds = duration.Seconds
+                                if seconds < 10 then
+                                    let secondsString = sprintf "0%i" seconds
+                                    yield str (sprintf "Won! Your time is: 00:%A" secondsString)
+                                else yield str (sprintf "Won! Your time is: %A:%A" minutes seconds)                                        
+                            ]
+
+                        //highscore tables
+                        
+                        if model.Highscores <> [] then
+
+                            //--
+                            
+
+
+                            //--
+                            yield table
+                                [ ]
+                                [ tr [ ]
+                                    [
+                                        td [ ]
+                                            [
+                                                let (highscoreEasy, x, y) = savedHighscores model
+                                                yield highscoreTable highscoreEasy model
+                                            ]
+                                        td [ ]
+                                            [
+                                                let (x, highscoresMedium, y) = savedHighscores model
+                                                yield highscoreTable highscoresMedium model
+                                            ]
+                                        td [ ]
+                                            [
+                                                let (x, y, highscoresHard) = savedHighscores model
+                                                yield highscoreTable highscoresHard model
+                                            ]
+                                    ]]
+                            
+
+                            
+                                
+                                        
+                            
                     ]
                     Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] ]
 
@@ -382,8 +589,9 @@ let view (model : Model) (dispatch : Msg -> unit) =
                             
                             //#####################################   LOGS
                             yield p [] [ str (sprintf "%A : Modell" model.Field)]
-                            yield p [] [str (sprintf "%A : Startzeit" model.StartTime )]
-                            yield p [] [str (sprintf "%A : Endzeit" model.EndTime )]
+                            yield p [] [ str (sprintf "%A : Highscore" model.CurrentHighscore)]
+                            yield p [] [ str (sprintf "%A : Highscores" model.Highscores)]
+
 
                                         ]
                     Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] ]
