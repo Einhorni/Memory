@@ -18,6 +18,8 @@ open System.Globalization
 open Fetch.Types
 open Fetch
 open Domain
+open Fable.DateFunctions
+open Fable.Import
 
 
     
@@ -43,7 +45,7 @@ type Msg =
     | HighscoreSaved of string //oder eher kein string, bzw. nichts mitgeben
     | SwitchFirstImage of (int * int) list list
     | SwitchImage of (int * int) list list
-    | SwitchSecondImage of (int * int) list list // oder ein if in switch image, je nachdem of eins offen ist oder keins
+    | SwitchSecondImage of (int * int) list list
     | CheckIfPair of (int * int) list list
     | Cover of (int*int) list list
     | BuildField of ((int*int) list list) * int * Difficulty
@@ -92,6 +94,8 @@ let inline meinPost<'typDerZuVersendendenDaten, 'typDerZuErhaltendenDaten> adres
 
 //############# call highscore list ##############
 
+
+
 let callHighscoreList () =
     Thoth.Fetch.Fetch.fetchAs<(int*int*DateTime*Difficulty) list> ("http://localhost:8080/api/callhighscore")
 let callHighscoreListCommand ()=
@@ -102,8 +106,6 @@ let callHighscoreListCommand ()=
 
 let saveInHighScoreList (highscore:int*int*DateTime*Difficulty) = 
     meinPost<int*int*DateTime*Difficulty, string> "http://localhost:8080/api/savehighscore" highscore
-//    //folgendes kann weg, weil schon unit zurückkommt
-//    //|> Promise.map (fun result -> ())
 
 let saveInHighScoreListCommand highscore =
     Cmd.OfPromise.either saveInHighScoreList highscore HighscoreSaved ServerError
@@ -116,8 +118,8 @@ let init () : Model * Cmd<Msg> =
     let initialModel = {
         Field = [[]]
         MaxRndNumber = 0
-        StartTime = DateTime.Now
-        EndTime = DateTime.Now
+        StartTime = DateTime.UtcNow
+        EndTime = DateTime.UtcNow
         Won = false
         CurrentHighscore = None
         Highscores = []
@@ -150,12 +152,12 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
         currentModel, Cmd.none
     | HighscoreSaved string ->
         currentModel, Cmd.none
-    //## and set StartTime
+    //#### and set StartTime
     | SwitchFirstImage newField ->        
         let nextModel = {
             currentModel with
                 Field = newField
-                StartTime = DateTime.Now
+                StartTime = DateTime.UtcNow
                 }
         nextModel, Cmd.none
     | SwitchImage newField ->        
@@ -253,14 +255,14 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
         let interModel = {
             currentModel with
                 Won = true
-                EndTime = DateTime.Now
+                EndTime = DateTime.UtcNow
             }
 
         let duration = interModel.EndTime - model.StartTime
         let minutes = duration.Minutes
         let seconds = duration.Seconds                    
         let newHighscore =
-            (minutes, seconds, DateTime.Now, model.FieldDifficulty)
+            (minutes, seconds, DateTime.UtcNow, model.FieldDifficulty)
         let nextModel = {
             interModel with
                 CurrentHighscore = Some newHighscore
@@ -388,16 +390,26 @@ let sortHighscore highscore =
     |> List.sort
 
 
-//#### mark current score in Highscore List
+//#### mark current score in Highscore List - comparison between two DateTimes doesnt work, therefore the partioning
 let markCurrentScore model (savedScore:int*int*DateTime*Difficulty) =
     let (minutes, seconds, date, difficulty) = savedScore
     match model.CurrentHighscore with
     | Some hs ->
         let (currentHsMin, currentHsSec, currentHsDate,c) = hs
-        if currentHsDate.Day = date.Day && currentHsDate.Month = date.Month && currentHsDate.Year = date.Year &&  currentHsMin = minutes && currentHsSec = seconds then
+        Fable.Core.JS.console.log(sprintf "Hour: %i und %i" currentHsDate.Hour date.Hour)
+        if
+            currentHsDate.Day = date.Day &&
+            currentHsDate.Month = date.Month &&
+            currentHsDate.Year = date.Year &&
+            currentHsDate.Hour = date.Hour &&
+            currentHsDate.Minute = date.Minute &&
+            currentHsDate.Second = date.Second &&
+            currentHsMin = minutes &&
+            currentHsSec = seconds
+        then
             ClassName "is-selected"
-        else ClassName""
-    | None -> ClassName""
+        else ClassName ""
+    | None -> ClassName ""
 
 
 //####build highscore table
@@ -416,15 +428,15 @@ let highscoreTable (highscoreList:(int*int*DateTime*Difficulty) list) (model:Mod
                 yield! sortHighscore highscoreList
                 |> List.map (fun highscore ->
                     let (minutes, seconds, date, difficulty) = highscore
-                    tr [ if model.CurrentHighscore = Some highscore then ClassName "is-selected" ]//???warum funktioniert das nicht?
+                    tr [ if model.CurrentHighscore = Some highscore then ClassName "is-selected" ]
                         [ 
                             td [ markCurrentScore model highscore ]
                                 [
                                     if seconds < 10 then
                                         let secondsString = sprintf "0%i" seconds
-                                        yield str (sprintf "%i:%s" minutes secondsString )
+                                        str (sprintf "%i:%s" minutes secondsString )
                                     else
-                                        yield str (sprintf "%i:%i" minutes seconds )
+                                        str (sprintf "%i:%i" minutes seconds )
                                 ]
                             td []
                                 [ str (sprintf "%A / %A / %A" date.Day date.Month date.Year ) ]
@@ -537,12 +549,13 @@ let view (model : Model) (dispatch : Msg -> unit) =
                     ] //columns
 
 
+            //####highscore annoucement
             Columns.columns
                 [ ][
                     Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ]
                     Column.column [ Column.Width (Screen.All, Column.Is8) ] [
                                     //time needed for solving
-                        p [] [
+                        p [ Style [CSSProp.TextAlign TextAlignOptions.Center; CSSProp.FontSize 40; CSSProp.Color "black" ] ] [
                             if model.Won = true then
                                 let duration = model.EndTime - model.StartTime
                                 let minutes = duration.Minutes
@@ -552,48 +565,44 @@ let view (model : Model) (dispatch : Msg -> unit) =
                                     str (sprintf "Won! Your time is: 00:%A" secondsString)
                                 else str (sprintf "Won! Your time is: %A:%A" minutes seconds)                                        
                             ]
-
-                        //highscore tables
-                        
-                        if model.Highscores <> [] then
-
-                            //--
-                            
-
-
-                            //--
-                            table
-                                [ ]
-                                [ tbody  []
-                                 [tr [ ]
-                                    [
-                                        td [ ]
-                                            [
-                                                str "Easy"
-                                                let (highscoreEasy, x, y) = savedHighscores model
-                                                highscoreTable highscoreEasy model
-                                            ]
-                                        td [ ]
-                                            [
-                                                str "Medium"
-                                                let (x, highscoresMedium, y) = savedHighscores model
-                                                highscoreTable highscoresMedium model
-                                            ]
-                                        td [ ]
-                                            [
-                                                str "Hard"
-                                                let (x, y, highscoresHard) = savedHighscores model
-                                                highscoreTable highscoresHard model
-                                            ]
-                                    ]]]
-                            
-
-                            
-                                
-                                        
-                            
                     ]
                     Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] ]
+
+
+
+            //####highscore tables
+            if model.Highscores <> [] then
+
+                Columns.columns
+                    [ ][
+                        Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ]
+                        Column.column [ Column.Width (Screen.All, Column.Is8) ] [
+                           
+                                table
+                                    [ Style [CSSProp.Margin "auto"] ]
+                                    [ tbody  []
+                                     [tr [ ]
+                                        [
+                                            let (highscoreEasy, highscoresMedium, highscoresHard) = savedHighscores model
+                                            td [ ]
+                                                [
+                                                    str "Easy"
+                                                    highscoreTable highscoreEasy model
+                                                ]
+                                            td [ ]
+                                                [
+                                                    str "Medium"
+                                                    highscoreTable highscoresMedium model
+                                                ]
+                                            td [ ]
+                                                [
+                                                    str "Hard"
+                                                    highscoreTable highscoresHard model
+                                                ]
+                                        ]]]
+                              
+                        ]
+                        Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] ]
 
 
             Columns.columns

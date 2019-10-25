@@ -7,8 +7,6 @@ open Saturn
 open System
 open Domain
 
-//open Shared
-
 
 let tryGetEnv = System.Environment.GetEnvironmentVariable >> function null | "" -> None | x -> Some x
 
@@ -24,8 +22,6 @@ let webApp = router {
             let highScoreList = callHighscores "highscores.json"
             return! json highScoreList next ctx
         })
-
-//saveHighscore newList highscore
 
     post "/api/savehighscore" (fun next ctx ->
         task {
@@ -44,11 +40,7 @@ let webApp = router {
                 saveHighscore "highscores.json" newHighscoreList
                 ctx.Response.StatusCode <- 200
                 return! json "formeller Rückgabestring" next ctx 
-        })
-
-
-
-    
+        })    
 }
 
 let app = application {

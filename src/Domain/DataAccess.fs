@@ -16,7 +16,6 @@ let callHighscores dateiname =
         let highscores =
             Newtonsoft.Json.JsonConvert.DeserializeObject<(int*int*DateTime*Difficulty) list>(inhalt)
         highscores
-    else //wenn es noch keine Datei gibt
-        //erstesErstelltesPromptSpeichern state -- sollte hier nicht mehr nötig sein 
+    else 
         failwith "Noch kein Highscore vorhanden" 
          

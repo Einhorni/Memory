@@ -8,9 +8,6 @@ type Difficulty =
     | Hard
     | NoGame
 
-//let highscoreList = []
-//let highscore = (5,4, DateTime.Now)
-
 let saveHighscoreInList highscoreList highscore =
     if highscoreList = [] then
         let newHSList = [highscore]
@@ -19,7 +16,4 @@ let saveHighscoreInList highscoreList highscore =
         let newHSList highscoreList =
             highscoreList @ [highscore]
         newHSList highscoreList
-            
-//let newList = saveHighscore highscoreList highscore
- 
-//saveHighscore newList highscore
+
