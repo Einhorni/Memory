@@ -32,6 +32,7 @@ type Model = {
     FieldDifficulty: Difficulty 
     CurrentHighscore: (int*int*DateTime*Difficulty) option //minutes, seconds, Date, field difficulty
     Highscores: (int*int*DateTime*Difficulty) list
+    PenaltyCounter: int
     Error: bool
     ErrorMessage: string option
     }
@@ -49,6 +50,7 @@ type Msg =
     | CheckIfPair of (int * int) list list
     | Cover of (int*int) list list
     | BuildField of ((int*int) list list) * int * Difficulty
+    | IncrementPenalty of int//reset bei build field... muss ich irgendwie mit den tupeln verbinden (int, (int,int)) ??
     | Won of Model
 
 
@@ -124,6 +126,7 @@ let init () : Model * Cmd<Msg> =
         CurrentHighscore = None
         Highscores = []
         FieldDifficulty = NoGame
+        PenaltyCounter = 0
         Error = false
         ErrorMessage = None
         }
@@ -151,7 +154,7 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
             }
         currentModel, Cmd.none
     | HighscoreSaved string ->
-        currentModel, Cmd.none
+        currentModel, Cmd.ofMsg CallHighscore // Cmd.none
     //#### and set StartTime
     | SwitchFirstImage newField ->        
         let nextModel = {
@@ -251,6 +254,9 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
                 Highscores = []
                 }
         nextModel, Cmd.none
+    | IncrementPenalty counter ->
+        let nextModel = { currentModel with PenaltyCounter = (counter + 1) } 
+        currentModel, Cmd.none
     | Won model ->
         let interModel = {
             currentModel with
@@ -415,7 +421,7 @@ let markCurrentScore model (savedScore:int*int*DateTime*Difficulty) =
 //####build highscore table
 let highscoreTable (highscoreList:(int*int*DateTime*Difficulty) list) (model:Model) =
     Table.table
-        []
+        [  ] 
         [
         thead [ ]
             [ tr [ ]
@@ -584,19 +590,19 @@ let view (model : Model) (dispatch : Msg -> unit) =
                                      [tr [ ]
                                         [
                                             let (highscoreEasy, highscoresMedium, highscoresHard) = savedHighscores model
-                                            td [ ]
+                                            td [ Style [ Padding "50px"] ] 
                                                 [
-                                                    str "Easy"
+                                                    p [ Style [ CSSProp.FontWeight "bold"; CSSProp.TextDecoration "underline" ] ] [str "Easy"]
                                                     highscoreTable highscoreEasy model
                                                 ]
-                                            td [ ]
+                                            td [ Style [ Padding "50px"] ]
                                                 [
-                                                    str "Medium"
+                                                    p [ Style [ CSSProp.FontWeight "bold"; CSSProp.TextDecoration "underline" ] ] [str "Medium"]
                                                     highscoreTable highscoresMedium model
                                                 ]
-                                            td [ ]
+                                            td [ Style [ Padding "50px"] ]
                                                 [
-                                                    str "Hard"
+                                                    p [ Style [ CSSProp.FontWeight "bold"; CSSProp.TextDecoration "underline" ] ] [str "Hard"]
                                                     highscoreTable highscoresHard model
                                                 ]
                                         ]]]
