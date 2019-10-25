@@ -24,7 +24,7 @@ open Fable.Import
 
     
 type Model = {
-    Field: (int * int) list list // visibility * type of picture
+    Field: (int * int * int) list list // visibility * type of picture
     MaxRndNumber: int
     StartTime: DateTime
     EndTime: DateTime
@@ -32,7 +32,7 @@ type Model = {
     FieldDifficulty: Difficulty 
     CurrentHighscore: (int*int*DateTime*Difficulty) option //minutes, seconds, Date, field difficulty
     Highscores: (int*int*DateTime*Difficulty) list
-    PenaltyCounter: int
+    //PenaltyCounter: int
     Error: bool
     ErrorMessage: string option
     }
@@ -44,13 +44,12 @@ type Msg =
     | CallHighscore
     | HighscoreCalled of (int*int*DateTime*Difficulty) list
     | HighscoreSaved of string //oder eher kein string, bzw. nichts mitgeben
-    | SwitchFirstImage of (int * int) list list
-    | SwitchImage of (int * int) list list
-    | SwitchSecondImage of (int * int) list list
-    | CheckIfPair of (int * int) list list
-    | Cover of (int*int) list list
-    | BuildField of ((int*int) list list) * int * Difficulty
-    | IncrementPenalty of int//reset bei build field... muss ich irgendwie mit den tupeln verbinden (int, (int,int)) ??
+    | SwitchFirstImage of (int * int * int) list list
+    | SwitchImage of (int * int * int) list list
+    | SwitchSecondImage of (int * int * int) list list
+    | CheckIfPair of (int * int * int) list list
+    | Cover of (int * int * int) list list
+    | BuildField of ((int * int * int) list list) * int * Difficulty
     | Won of Model
 
 
@@ -113,7 +112,30 @@ let saveInHighScoreListCommand highscore =
     Cmd.OfPromise.either saveInHighScoreList highscore HighscoreSaved ServerError
 
 
+let penaltyCalculator (field: (int*int*int) list list) =
+    field
+    |> List.map (fun y ->
+        y
+        |> List.map (fun x ->
+        let (a,b, counter) = x
+        counter)
+        |> List.map (fun x ->
+            match x with
+            | 3 -> 5
+            | 4 -> 10
+            | 5 -> 20
+            | x when x > 6 -> 60
+            | _ -> 0)
+        |> List.sum)
+    |> List.sum
 
+
+let newHighscore model interModel = 
+    let duration = interModel.EndTime.AddSeconds(penaltyCalculator model.Field) - model.StartTime
+    let minutes = duration.Minutes
+    let seconds = duration.Seconds                    
+            
+    (minutes, seconds, DateTime.UtcNow, model.FieldDifficulty)
 
 
 let init () : Model * Cmd<Msg> =
@@ -126,7 +148,7 @@ let init () : Model * Cmd<Msg> =
         CurrentHighscore = None
         Highscores = []
         FieldDifficulty = NoGame
-        PenaltyCounter = 0
+        //PenaltyCounter = 0
         Error = false
         ErrorMessage = None
         }
@@ -185,25 +207,29 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
             |> List.map (fun x ->
                 x
                 |> List.filter (fun y ->
-                    let (visible, image) = y
+                    let (visible, image, counter) = y
                     visible = image && visible <> 0
                     ))
             |> List.concat
+            |> List.map (fun x ->
+                let (visible, image, counter) = x
+                (visible, image)
+                )
             |> List.distinct
 
 
         //####change model if pair
         let nextModel =
             if checkIfPair.Length = 1 then
-                let shownImage =
+                let (visiblePair, imagePair) =
                     checkIfPair |> List.exactlyOne
                 let newField =
                     fieldAfterSecondSwitch
                     |> List.map (fun x ->
                         x
                         |> List.map (fun y ->
-                            let (visible, image) = y
-                            if y = shownImage then (image, 0) else y))
+                            let (visible, image, counter) = y
+                            if visible = visiblePair && image = imagePair then (image, 0, counter) else y))
                 {
                     currentModel with
                         Field = newField
@@ -217,8 +243,8 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
                 |> List.map (fun x ->
                     x
                     |> List.filter (fun y ->
-                        let (visible, image) = y
-                        y = (0, image) || visible = image))
+                        let (visible, image, counter) = y
+                        y = (0, image, counter) || visible = image))
                 |> List.concat
                 |> List.length
             howManyTilesUntilWon = 0
@@ -234,9 +260,9 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
             |> List.map (fun x ->
                 x
                 |> List.map (fun y ->
-                    let (a,b) = y
-                    if b = 0 && a <> 0 then (a,0) // = y
-                    else (0,b)))
+                    let (a,b,c) = y
+                    if b = 0 && a <> 0 then (a,0,c) // = y
+                    else (0,b,c)))
         let nextModel = {
             currentModel with
                 Field = newNewList
@@ -254,26 +280,17 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
                 Highscores = []
                 }
         nextModel, Cmd.none
-    | IncrementPenalty counter ->
-        let nextModel = { currentModel with PenaltyCounter = (counter + 1) } 
-        currentModel, Cmd.none
     | Won model ->
         let interModel = {
             currentModel with
                 Won = true
                 EndTime = DateTime.UtcNow
             }
-
-        let duration = interModel.EndTime - model.StartTime
-        let minutes = duration.Minutes
-        let seconds = duration.Seconds                    
-        let newHighscore =
-            (minutes, seconds, DateTime.UtcNow, model.FieldDifficulty)
         let nextModel = {
             interModel with
-                CurrentHighscore = Some newHighscore
+                CurrentHighscore = Some (newHighscore model interModel)
             }
-        let cmdSaveHighscore = Cmd.ofMsg (SaveHighscore newHighscore)
+        let cmdSaveHighscore = Cmd.ofMsg (SaveHighscore (newHighscore model interModel))
         nextModel, cmdSaveHighscore
 
         
@@ -283,20 +300,20 @@ let r = Random()
 //####visibility and value of image
 let showImages modelFeld =
     match modelFeld with
-    | (1,_) -> Src "images\Unbenannt2.png"
-    | (2,_) -> Src "images\Unbenannt3.png"
-    | (3,_) -> Src "images\Unbenannt4.png"
-    | (4,_) -> Src "images\Unbenannt5.png"
-    | (5,_) -> Src "images\Unbenannt6.png"
-    | (6,_) -> Src "images\Unbenannt7.png"
-    | (7,_) -> Src "images\Unbenannt8.png"
-    | (8,_) -> Src "images\Unbenannt9.png"
-    | (9,_) -> Src "images\Unbenannt10.png"
-    | (10,_) -> Src "images\Unbenannt11.png"
-    | (11,_) -> Src "images\Unbenannt12.png"
-    | (12,_) -> Src "images\Unbenannt13.png"
-    | (13,_) -> Src "images\Unbenannt14.png"
-    | (14,_) -> Src "images\Unbenannt15.png"
+    | (1,_,_) -> Src "images\Unbenannt2.png"
+    | (2,_,_) -> Src "images\Unbenannt3.png"
+    | (3,_,_) -> Src "images\Unbenannt4.png"
+    | (4,_,_) -> Src "images\Unbenannt5.png"
+    | (5,_,_) -> Src "images\Unbenannt6.png"
+    | (6,_,_) -> Src "images\Unbenannt7.png"
+    | (7,_,_) -> Src "images\Unbenannt8.png"
+    | (8,_,_) -> Src "images\Unbenannt9.png"
+    | (9,_,_) -> Src "images\Unbenannt10.png"
+    | (10,_,_) -> Src "images\Unbenannt11.png"
+    | (11,_,_) -> Src "images\Unbenannt12.png"
+    | (12,_,_) -> Src "images\Unbenannt13.png"
+    | (13,_,_) -> Src "images\Unbenannt14.png"
+    | (14,_,_) -> Src "images\Unbenannt15.png"
     | (_) -> Src "images\Unbenannt.png"
     
 
@@ -304,7 +321,9 @@ let showImages modelFeld =
 let howManyImagesOfOneType model rndImage =
     model.Field
     |> List.concat
-    |> List.filter (fun x -> x = (rndImage, rndImage) || x = (0, rndImage) || x = (rndImage, 0))
+    |> List.filter (fun x ->
+        let (a,b,counter) = x
+        x = (rndImage, rndImage, counter) || x = (0, rndImage, counter) || x = (rndImage, 0, counter))
     |> List.length
 
 
@@ -322,13 +341,14 @@ let uncoverTiles i1 i2 model =
     let newInnerList =
         innerList
         |> List.mapi (fun i x ->
-            //####set new image to tile
-            if i = i2 && x = (0,0) then
-                setRandomNumberForImages model howManyImagesOfOneType
-            //####if number already set, just switch first part of tuple (uncover image without changing set number/image)
-            elif i = i2 && x <> (0,0) then
-                let (visible, image) = x
-                (image, image)
+            let (visible, image, counter) = x
+            //####set new image to tile and increase counter by 1
+            if i = i2 && x = (0,0,0) then
+                let (newVisible, newImage) = setRandomNumberForImages model howManyImagesOfOneType
+                (newVisible, newImage, counter+1)
+            //####if number already set, just switch first part of tuple (uncover image without changing set number/image) and increase counter by 1
+            elif i = i2 && x <> (0,0, counter) then
+                (image, image, counter+1)
             else x)
     let newField =
         model.Field
@@ -342,7 +362,7 @@ let howManyUncovered model =
     |> List.map (fun x ->
         x
         |> List.filter (fun y ->
-            let (visible, image) = y
+            let (visible, image, counter) = y
             visible = image && visible <> 0 // y = (1,1) || (2,2) ....
             ))
         |> List.concat
@@ -356,18 +376,19 @@ let coverFields feld =
     |> List.map (fun x ->
         x
         |> List.map (fun y ->
-            let (visible, image) = y
-            if visible = image && visible <> 0 then (0, image) else y))
+            let (visible, image, counter) = y
+            if visible = image && visible <> 0 then (0, image, counter) else y))
 
 
-//#### true = new Field
+//#### true = cover all and set new field
 let isNewField playField =
     let howManyUnvoveredTiles =
         playField
         |> List.map (fun x ->
             x
             |> List.filter (fun y ->
-                y <> (0,0)))
+                //if at least one image is set its not a new field
+                y <> (0,0,0))) 
         |> List.concat
         |> List.length
     howManyUnvoveredTiles = 0
@@ -452,6 +473,9 @@ let highscoreTable (highscoreList:(int*int*DateTime*Difficulty) list) (model:Mod
 
 
 
+    
+
+
 //############################################################################
 //################################VIEW########################################
 //############################################################################
@@ -474,7 +498,12 @@ let view (model : Model) (dispatch : Msg -> unit) =
                         //####Choose size of playfield
                         Button.button
                             [
-                                Button.OnClick (fun _ -> dispatch (BuildField ([[(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0)]], 9, Medium)) )
+                                Button.OnClick (fun _ ->
+                                    dispatch
+                                        (BuildField ([[(0,0,0); (0,0,0); (0,0,0); (0,0,0)];
+                                            [(0,0,0); (0,0,0); (0,0,0); (0,0,0)];
+                                            [(0,0,0); (0,0,0); (0,0,0); (0,0,0)];
+                                            [(0,0,0); (0,0,0); (0,0,0); (0,0,0)]], 9, Medium)) )
                                 Button.IsOutlined
                                 Button.Color IsBlack
                                 Button.Size IsLarge
@@ -484,7 +513,7 @@ let view (model : Model) (dispatch : Msg -> unit) =
                             [ str "Medium: 4x4"]
                         Button.button
                             [
-                                Button.OnClick (fun _ -> dispatch (BuildField ([[(0,0);(0,0)]; [(0,0); (0,0)]], 3, Easy)) )
+                                Button.OnClick (fun _ -> dispatch (BuildField ([[(0,0,0);(0,0,0)]; [(0,0,0); (0,0,0)]], 3, Easy)) )
                                 Button.IsOutlined
                                 Button.Color IsBlack
                                 Button.Option.Props [ Style [ Margin "20px"] ]
@@ -493,7 +522,12 @@ let view (model : Model) (dispatch : Msg -> unit) =
                             [ str "Easy: 2x2"]
                         Button.button
                             [
-                                Button.OnClick (fun _ -> dispatch (BuildField ([[(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]; [(0,0); (0,0); (0,0); (0,0); (0,0); (0,0); (0,0)]], 15, Hard)) )
+                                Button.OnClick (fun _ ->
+                                    dispatch
+                                        (BuildField ([[(0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0)];
+                                                [(0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0)];
+                                                [(0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0)];
+                                                [(0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0)]], 15, Hard)) )
                                 Button.IsOutlined
                                 Button.Color IsBlack
                                 Button.Option.Props [ Style [ Margin "20px"] ]
@@ -534,13 +568,13 @@ let view (model : Model) (dispatch : Msg -> unit) =
                                                                 | 1 ->
                                                                     match model.Field.[index1].[index2] with
                                                                     //#### cant click visible image another time
-                                                                    | (0,_) ->
+                                                                    | (0,_,_) ->
                                                                         dispatch (SwitchSecondImage (uncoverTiles index1 index2 model))
                                                                     | _ -> ()
                                                                 | 0 ->
                                                                     match model.Field.[index1].[index2] with
                                                                     //#### cant click visible image another time
-                                                                    | (0,_) ->
+                                                                    | (0,_,_) ->
                                                                         if (isNewField model.Field) then
                                                                             dispatch (SwitchFirstImage (uncoverTiles index1 index2 model))
                                                                         else dispatch (SwitchImage (uncoverTiles index1 index2 model))
@@ -566,10 +600,28 @@ let view (model : Model) (dispatch : Msg -> unit) =
                                 let duration = model.EndTime - model.StartTime
                                 let minutes = duration.Minutes
                                 let seconds = duration.Seconds
+                                
                                 if seconds < 10 then
                                     let secondsString = sprintf "0%i" seconds
                                     str (sprintf "Won! Your time is: 00:%A" secondsString)
-                                else str (sprintf "Won! Your time is: %A:%A" minutes seconds)                                        
+                                    p [ ] [str (sprintf "Your penalty time is: %A seconds" (penaltyCalculator model.Field))]
+                                    p [ ] [
+                                        match model.CurrentHighscore with
+                                        | Some (min, sec, a, b) ->
+                                            if seconds < 10 then
+                                                let secondsString = sprintf "0%i" seconds
+                                                str (sprintf "Your score is: 00:%A" secondsString)
+                                            else str (sprintf "Your score is: %A:%A" min sec)
+                                        | None -> ()        
+                                        ]
+                                else
+                                    str (sprintf "Won! Your time is: %A:%A" minutes seconds)
+                                    p [ ] [str (sprintf "Your penalty time is: %A seconds" (penaltyCalculator model.Field))]
+                                    p [ ] [
+                                        match model.CurrentHighscore with
+                                        | Some (min, sec, a, b) -> str (sprintf "Your score is: %A:%A" min sec)
+                                        | None -> ()        
+                                        ]
                             ]
                     ]
                     Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] ]
@@ -619,12 +671,22 @@ let view (model : Model) (dispatch : Msg -> unit) =
 
                             
                             //#####################################   LOGS
-                            yield p [] [ str (sprintf "%A : Modell" model.Field)]
-                            yield p [] [ str (sprintf "%A : Highscore" model.CurrentHighscore)]
-                            yield p [] [ str (sprintf "%A : Highscores" model.Highscores)]
+                            p [] [ str (sprintf "%A : Modell" model.Field)]
+                            p [] [ str (sprintf "%A : Highscore" model.CurrentHighscore)]
+                            p [] [ str (sprintf "%A : Highscores" model.Highscores)]
 
-                            
-                            
+                            let checkIfPair model =
+                                model.Field
+                                |> List.map (fun x ->
+                                    x
+                                    |> List.filter (fun y ->
+                                        let (visible, image, counter) = y
+                                        visible = image && visible <> 0
+                                        ))
+                                |> List.concat
+                                |> List.distinct
+
+                            p [] [ str (sprintf "%A : checkifpair" (checkIfPair model))]                            
 
                             
 
