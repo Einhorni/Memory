@@ -10,6 +10,9 @@
         <None Include="style.scss" />
         <Compile Include="..\Shared\Shared.fs" />
         <Compile Include="Version.fs" />
+        <Compile Include="ClientTypes.fs" />
+        <Compile Include="ClientFunctions.fs" />
+        <Compile Include="Helper.fs" />
         <Compile Include="Client.fs" />
     </ItemGroup>
     <ItemGroup>

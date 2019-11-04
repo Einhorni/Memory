@@ -1,7 +1,5 @@
 module Domain
 
-open System
-
 type Difficulty =
     | Easy
     | Medium
@@ -16,4 +14,3 @@ let saveHighscoreInList highscoreList highscore =
         let newHSList highscoreList =
             highscoreList @ [highscore]
         newHSList highscoreList
-
