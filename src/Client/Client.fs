@@ -52,6 +52,8 @@ let init () : Model * Cmd<Msg> =
         //PenaltyCounter = 0
         Error = false
         ErrorMessage = None
+        Timer = 0.0, 0.0
+        IntervalID = 0
         }
     initialModel, Cmd.none
 
@@ -86,13 +88,36 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
     | HighscoreSaved string ->
         currentModel, Cmd.ofMsg CallHighscore // Cmd.none
     //#### and set StartTime
-    | SwitchFirstImage newField ->        
-        let nextModel = {
-            currentModel with
-                Field = newField
-                StartTime = DateTime.UtcNow
-                }
-        nextModel, Cmd.none
+    | SwitchFirstImage newField ->
+
+        if currentModel.Won = false then
+            let cmdInterval =
+                fun dispatch ->
+                    let callbackIf1SecIsOver () =
+                        //aktuelle Millisekungen von jetzt an ChangeTimer geben
+                        dispatch (ChangeTimer DateTime.Now)
+                    let newIntervalID = Fable.Core.JS.setInterval callbackIf1SecIsOver 1000
+                    //nach 1 sekunde wieder neuen Interval auf 1 sek setzen
+                    dispatch (ChangeTimeoutID newIntervalID)
+                |> Cmd.ofSub
+            let nextModel = {
+                currentModel with
+                    Field = newField
+                    StartTime = DateTime.UtcNow
+                    Timer = 0.0, 0.0
+                    IntervalID = 0
+                    }
+            nextModel, cmdInterval
+        else
+            let nextModel = {
+                currentModel with
+                    Field = newField
+                    StartTime = DateTime.UtcNow
+                    Timer = 0.0, 0.0
+                    }
+            nextModel, Cmd.none
+
+
     | SwitchImage newField ->        
         let nextModel = {
             currentModel with
@@ -111,7 +136,22 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
     | Cover newList -> coverTiles newList currentModel
     | BuildField (playField, maxRndNumber, difficulty) ->
         buildField (playField, maxRndNumber, difficulty) currentModel
-    | Won model -> isWon currentModel model 
+    | Won model -> isWon currentModel model
+    | ChangeTimer datetime ->
+        let duration = datetime - currentModel.StartTime
+        let nextModel = {
+            currentModel with
+                Timer = duration.TotalMinutes, duration.TotalSeconds
+            }
+            
+        nextModel, Cmd.none
+    | ChangeTimeoutID int ->
+        let nextModel = {
+            currentModel with
+                IntervalID = int
+            }
+            
+        nextModel, Cmd.none
       
     
 
@@ -141,6 +181,36 @@ let view (model : Model) (dispatch : Msg -> unit) =
                             p
                                 [ Style [CSSProp.TextAlign TextAlignOptions.Center ] ]
                                 [str "If tiles of one image are uncovered 5 times you get 10 penalty seconds, 5 times get 30 seconds and 7+ times get 60 seconds."]
+                        ]
+                    Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] ]
+
+
+            Columns.columns
+                [ ][
+                    Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ]
+                    Column.column [ Column.Width (Screen.All, Column.Is8) ]
+                        [
+                            p [  Style [CSSProp.FontSize 20; CSSProp.TextAlign TextAlignOptions.Center ]  ]
+                                [
+                                    let (min, sec) = model.Timer
+                                    let intmin = int min
+                                    let intsec = int sec
+                                    if intmin > 0
+                                    then
+                                        let newsec = intsec - intmin * 60
+                                        if newsec < 10 then
+                                            let secondsString = sprintf "0%i" newsec
+                                            str (sprintf "Timer: %i:%s" intmin secondsString )
+                                        else
+                                            str (sprintf "Timer: %i:%i" intmin newsec ) 
+                                        //str (sprintf "Vergangene Sekunden: %A:%A" intmin newsec)
+                                    else
+                                        if intsec < 10 then
+                                            let secondsString = sprintf "0%i" intsec
+                                            str (sprintf "Timer: %i:%s" intmin secondsString )
+                                        else
+                                            str (sprintf "Timer: %i:%i" intmin intsec ) ]
+                            
                         ]
                     Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] ]
 
@@ -178,6 +248,9 @@ let view (model : Model) (dispatch : Msg -> unit) =
                         Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ]
                         showHighscores model
                         Column.column [ Column.Width (Screen.All, Column.Is2) ] [ ] ]
+
+
+
         ]
 
 #if DEBUG

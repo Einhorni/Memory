@@ -1,3 +1,4 @@
+
 module ClientTypes
 
 open System
@@ -15,6 +16,8 @@ type Model = {
     //PenaltyCounter: int
     Error: bool
     ErrorMessage: string option
+    Timer: float * float
+    IntervalID: int
     }
 
 
@@ -31,3 +34,5 @@ type Msg =
     | Cover of (int * int * int) list list
     | BuildField of ((int * int * int) list list) * int * Difficulty
     | Won of Model
+    | ChangeTimer of DateTime
+    | ChangeTimeoutID of int

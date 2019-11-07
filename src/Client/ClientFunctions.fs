@@ -8,6 +8,7 @@ open Fulma
 open Elmish
 open Fable.React
 open Fable.React.Props
+open System.Timers
 
 
 //#### old calculator: counts each switched image seperate (not the sum),
@@ -174,6 +175,7 @@ let coverTiles newList currentModel =
 
 
 let buildField (playField, maxRndNumber, difficulty) currentModel =
+    Fable.Core.JS.clearInterval currentModel.IntervalID
     let nextModel = {
         currentModel with
             Field = playField
@@ -183,12 +185,14 @@ let buildField (playField, maxRndNumber, difficulty) currentModel =
             FieldDifficulty = difficulty
             CurrentHighscore = None
             Highscores = []
+            Timer = 0.0, 0.0
             }
     nextModel, Cmd.none
 
 
 let isWon currentModel wonModel = 
 
+    Fable.Core.JS.clearInterval currentModel.IntervalID
     let interModel = {
         currentModel with
             Won = true
