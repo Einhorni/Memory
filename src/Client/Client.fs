@@ -38,7 +38,6 @@ let saveInHighScoreListCommand highscore =
 //############################################################################
 
 
-
 let init () : Model * Cmd<Msg> =
     let initialModel = {
         Field = [[]]
@@ -94,10 +93,10 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
             let cmdInterval =
                 fun dispatch ->
                     let callbackIf1SecIsOver () =
-                        //aktuelle Millisekungen von jetzt an ChangeTimer geben
+                        //send Time.Now to ChangeTimer
                         dispatch (ChangeTimer DateTime.Now)
                     let newIntervalID = Fable.Core.JS.setInterval callbackIf1SecIsOver 1000
-                    //nach 1 sekunde wieder neuen Interval auf 1 sek setzen
+                    //after 1 sec, reset interval to 1000 ms
                     dispatch (ChangeTimeoutID newIntervalID)
                 |> Cmd.ofSub
             let nextModel = {
@@ -203,7 +202,6 @@ let view (model : Model) (dispatch : Msg -> unit) =
                                             str (sprintf "Timer: %i:%s" intmin secondsString )
                                         else
                                             str (sprintf "Timer: %i:%i" intmin newsec ) 
-                                        //str (sprintf "Vergangene Sekunden: %A:%A" intmin newsec)
                                     else
                                         if intsec < 10 then
                                             let secondsString = sprintf "0%i" intsec

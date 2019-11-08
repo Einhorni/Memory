@@ -414,7 +414,7 @@ let chooseFieldSize dispatch =
                             (BuildField ([[(0,0,0); (0,0,0); (0,0,0); (0,0,0)];
                                 [(0,0,0); (0,0,0); (0,0,0); (0,0,0)];
                                 [(0,0,0); (0,0,0); (0,0,0); (0,0,0)];
-                                [(0,0,0); (0,0,0); (0,0,0); (0,0,0)]], 9, Medium)) )
+                                [(0,0,0); (0,0,0); (0,0,0); (0,0,0)]], 9, Easy)) )
                     Button.IsOutlined
                     Button.Color IsBlack
                     Button.Option.Props [ Style [ Margin "20px"] ]
@@ -428,7 +428,7 @@ let chooseFieldSize dispatch =
                             (BuildField ([[(0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0)];
                                     [(0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0)];
                                     [(0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0)];
-                                    [(0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0)]], 15, Hard)) )
+                                    [(0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0); (0,0,0)]], 15, Medium)) )
                     Button.IsOutlined
                     Button.Color IsBlack
                     Button.Size IsLarge
@@ -476,14 +476,14 @@ let highscoreannouncement model =
                                 
                 if seconds < 10 then
                     let secondsString = sprintf "0%i" seconds
-                    str (sprintf "Won! Your time is: 00:%A" secondsString)
+                    str (sprintf "Won! Your time is: 0%A:%A" minutes secondsString)
                     p [ ] [str (sprintf "Your penalty time is: %A seconds" (penaltyCalculator model.Field))]
                     p [ ] [
                         match model.CurrentHighscore with
                         | Some (min, sec, a, b) ->
-                            if seconds < 10 then
-                                let secondsString = sprintf "0%i" seconds
-                                str (sprintf "Your score is: 00:%A" secondsString)
+                            if sec < 10 then
+                                let secString = sprintf "0%i" sec
+                                str (sprintf "Your score is: 0%A:%A" minutes secString)
                             else str (sprintf "Your score is: %A:%A" min sec)
                         | None -> ()        
                         ]
